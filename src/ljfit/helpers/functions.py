@@ -8,13 +8,18 @@ Useful functions for the ljfit package.
 from __future__ import annotations
 
 from typing import List, Optional, Union
-
+import matplotlib.pyplot as plt
 import pandas as pd
 from pathlib import Path
 import sys
+from lmfit import Parameters
 
 
 from .. import __version__
+
+# define constants
+EH2KCAL = 627.503  # kcal/mol
+ANGSTROM2BOHR = 1.8897259885789  # conversion factor from angstrom to bohr
 
 
 def get_file_list(path: str, regex: str) -> List[Path]:
@@ -110,3 +115,48 @@ def combine_xyz(
         write_xyz(combined, output)
 
     return combined
+
+
+def print_lj_params(df: pd.DataFrame, i: int) -> None:
+    """Write the lj parameters to the console in common units.
+    That is, convert the parameters from atomic units to kcal/mol and Angstrom.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame containing the lj parameters in a.u., with columns ['atom_pair', 'epsilon', 'sigma']
+    i : int
+        Iteration number
+    """
+    df["epsilon"] *= EH2KCAL
+    df["sigma"] /= ANGSTROM2BOHR
+
+    print(f"LJ paramters: Iteration {i}")
+    print(df.to_string(index=False), "\n")
+
+
+def params_to_df(params: Parameters) -> pd.DataFrame:
+    """Converts lmfit.Parameters with LJ parameters to pd.DataFrame
+
+    Parameters
+    ----------
+    params : Parameters
+        Input lmfit.Parameters
+
+    Returns
+    -------
+    pd.DataFrame
+        Output DataFrame with columns ['atom_pair', 'epsilon', 'sigma']
+    """
+
+    l_params = []
+    for key in params.keys():
+        if key.endswith("_0") and key.startswith("epsilon"):
+            atom_pair = key.split("_")[1] + "_" + key.split("_")[2]
+            epsilon = params[f"epsilon_{atom_pair}_0"].value
+            sigma = params[f"sigma_{atom_pair}_0"].value
+            l_params.append([atom_pair, epsilon, sigma])
+
+    df_params = pd.DataFrame(l_params, columns=["atom_pair", "epsilon", "sigma"])
+
+    return df_params

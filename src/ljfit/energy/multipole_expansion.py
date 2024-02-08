@@ -16,15 +16,6 @@ from .. import __version__
 
 # define constants
 EH2KCAL = 627.503  # kcal/mol
-EV2KCAL = 23.0609  # kcal/mol
-EH2KJ = 2625.5  # kj/mol
-EV2KJ = 96.4869  # kj/mol
-EH2EV = 27.2107  # electronvolt
-EV2EH = 0.0367502  # hartree
-EH2J = 43.60e-19  # Joule
-K_BOLTZ = 1.38064852e-23  # Boltzmann constant in J/K
-N_AVOGADRO = 6.02214076e23  # Avogadro constant in 1/mol
-EPS_0 = 8.8541878128e-12  # vacuum permittivity in F/m
 ANGSTROM2BOHR = 1.8897259885789  # conversion factor from angstrom to bohr
 
 

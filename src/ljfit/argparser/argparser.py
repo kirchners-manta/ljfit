@@ -222,7 +222,14 @@ def parser(name: str = "ljfit", **kwargs) -> argparse.ArgumentParser:
         "--energy",
         action="store_true",
         help="Calculate energy contributions.",
-        default=True,
+        default=False,
+    )
+    p.add_argument(
+        "-f",
+        "--fit",
+        action="store_true",
+        help="Fit LJ parameters.",
+        default=False,
     )
     p.add_argument(
         "-s",

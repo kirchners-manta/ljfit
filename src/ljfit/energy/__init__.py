@@ -24,4 +24,4 @@ from .multipole_expansion import (
     get_e_pol,
 )
 
-from .system_parameters import get_system_energy
+from .energy_parameters import get_system_energy
