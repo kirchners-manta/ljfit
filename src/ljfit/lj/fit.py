@@ -16,6 +16,7 @@ from pathlib import Path
 from scipy.spatial import distance_matrix
 from ..helpers import get_file_list, print_lj_params, params_to_df
 import matplotlib.pyplot as plt
+import sys
 
 
 from .. import __version__
@@ -138,7 +139,7 @@ def get_residuals(params: Parameters, filelist: List[Path], data: pd.Series) -> 
     return residuals
 
 
-def get_params_to_fit(filelist: List[str | Path]) -> pd.DataFrame:
+def get_clap_params(filelist: List[str | Path]) -> pd.DataFrame:
     """Generate a DataFrame with initial Lennard-Jones parameters for a fit.
 
     Parameters
@@ -207,6 +208,8 @@ def get_params_to_fit(filelist: List[str | Path]) -> pd.DataFrame:
 
     # find all unique atom pairs by atom name
     atom_pairs = list(set(itertools.product(b["atom"], a["atom"])))
+    # sort the atom pairs in alphabetical order
+    atom_pairs = sorted(atom_pairs, key=lambda x: (x[0], x[1]))
 
     # find the parameters for each atom pair in the CL&P dictionaries
     # form a DataFrame with initial Lennard-Jones parameters for a fit
@@ -296,6 +299,113 @@ def plot_fit(
     plt.close(fig)
 
 
+def scaling(kind: str, param: str, i: int) -> float:
+    """Scaling function for the Lennard-Jones parameters.
+
+    Parameters
+    ----------
+    kind : str
+        Kind of scaling, either "max" or "min".
+    param : str
+        Parameter to be scaled, either "epsilon" or "sigma".
+    i: int
+        Iteration number.
+
+    Returns
+    -------
+    float
+        Scaling factor.
+    """
+
+    if kind == "max":
+        if param == "epsilon":
+            if i < 20:
+                return 1.1
+            else:
+                return 1.05
+        elif param == "sigma":
+            if i < 20:
+                return 1.1
+            else:
+                return 1.05
+    elif kind == "min":
+        if param == "epsilon":
+            if i < 20:
+                return 0.9
+            else:
+                return 0.95
+        elif param == "sigma":
+            if i < 20:
+                return 0.9
+            else:
+                return 0.95
+    else:
+        return 0.0
+
+
+def update_params(
+    fit_params: Parameters, diff_lj_params: pd.DataFrame, i: int
+) -> Parameters:
+    """Update the parameters of the fit.
+
+    Parameters
+    ----------
+    fit_params : Parameters
+        Parameters object with the Lennard-Jones parameters to fit.
+    diff_lj_params : pd.DataFrame
+        DataFrame with the current Lennard-Jones parameters as well as the differences to the previous iteration.
+    i : int
+        Iteration number.
+
+    Returns
+    -------
+    Parameters
+        Updated parameters of the fit.
+    """
+    # number of parameters
+    n_params = len(diff_lj_params)
+    # number of parameter sets
+    n_sets = len(fit_params) // (n_params * 2)
+    # instantiate the new Parameters object
+    new_fit_params = Parameters()
+
+    # generate the new parameters
+    for j in range(n_sets):
+        for k in range(n_params):
+            # determine which parameters are varying
+
+            new_fit_params.add(
+                fit_params[f"epsilon_{diff_lj_params['atom_pair'][k]}_{j}"].name,
+                value=fit_params[f"epsilon_{diff_lj_params['atom_pair'][k]}_{j}"].value
+                + diff_lj_params["Delta_eps"][k],
+                max=fit_params[f"epsilon_{diff_lj_params['atom_pair'][k]}_{j}"]
+                * scaling("max", "epsilon", i),
+                min=fit_params[f"epsilon_{diff_lj_params['atom_pair'][k]}_{j}"]
+                * scaling("min", "epsilon", i),
+                vary=True if (i + 1 - k) % 2 == 0 else False,
+            )
+            new_fit_params.add(
+                fit_params[f"sigma_{diff_lj_params['atom_pair'][k]}_{j}"].name,
+                value=fit_params[f"sigma_{diff_lj_params['atom_pair'][k]}_{j}"].value
+                + diff_lj_params["Delta_sig"][k],
+                max=fit_params[f"sigma_{diff_lj_params['atom_pair'][k]}_{j}"]
+                * scaling("max", "sigma", i),
+                min=fit_params[f"sigma_{diff_lj_params['atom_pair'][k]}_{j}"]
+                * scaling("min", "sigma", i),
+                vary=True if (i + 1 - k) % 2 == 0 else False,
+            )
+            if j > 0:
+                new_fit_params[f"epsilon_{diff_lj_params['atom_pair'][k]}_{j}"].expr = (
+                    f"epsilon_{diff_lj_params['atom_pair'][k]}_0"
+                )
+                new_fit_params[f"sigma_{diff_lj_params['atom_pair'][k]}_{j}"].expr = (
+                    f"sigma_{diff_lj_params['atom_pair'][k]}_0"
+                )
+            # debug
+            # print(True if (i + 1 - k) % 2 == 0 else False)
+    return new_fit_params
+
+
 def fit_lj_params(monomer_a: str, monomer_b: str, orientation: List[str]) -> None:
     """Fit Lennard-Jones parameters to a system of monomers, using the given orientations.
 
@@ -345,18 +455,16 @@ def fit_lj_params(monomer_a: str, monomer_b: str, orientation: List[str]) -> Non
         df_energy.reset_index(drop=True, inplace=True)
 
         # generate starting parameters for the fit
-        start_params = get_params_to_fit(geolist)  # type: ignore
+        clap_params = get_clap_params(geolist)  # type: ignore
 
         # instantiate the Parameters object
         fit_params = Parameters()
 
         for j in range(len(geolist)):
-            for _, row in start_params.iterrows():
+            for _, row in clap_params.iterrows():
                 fit_params.add(
                     f"epsilon_{row['atom_pair']}_{j}",
                     value=0.85 * row["epsilon"],
-                    # min=0.5 * row["epsilon"],
-                    # max=0.9 * row["epsilon"],
                     vary=False,
                 )
                 fit_params.add(
@@ -375,12 +483,21 @@ def fit_lj_params(monomer_a: str, monomer_b: str, orientation: List[str]) -> Non
                         f"sigma_{row['atom_pair']}_0"
                     )
 
+        lj_params = params_to_df(fit_params)
+
         # info
         print(f"Starting the fit for {monomer_b}-{monomer_a}/{orientation[i]}.\n")
-        print_lj_params(params_to_df(fit_params), 0)
+
+        # initialize difference DataFrame for printing
+        old_lj_params = lj_params.copy()
+        diff = lj_params.copy()
+        diff["Delta_eps"] = np.zeros(len(lj_params))
+        diff["Delta_sig"] = np.zeros(len(lj_params))
+        print_lj_params(diff, 0)
 
         # fitting loop
-        for c in range(10):
+        for c in range(1, 20):
+
             # perform fit
             fit_out = minimize(
                 get_residuals,
@@ -389,63 +506,96 @@ def fit_lj_params(monomer_a: str, monomer_b: str, orientation: List[str]) -> Non
                 method="least_squares",
             )
 
+            # print the current parameters
+            # first, copy the current parameters to a new DataFrame
+            lj_params = params_to_df(fit_out.params)
+            diff[["epsilon", "sigma"]] = lj_params[["epsilon", "sigma"]]
+            # if epsilon was updated in the fit, calculate the difference
+            if (old_lj_params["epsilon"] != lj_params["epsilon"]).any():
+                diff["Delta_eps"] = lj_params["epsilon"] - old_lj_params["epsilon"]
+            # if sigma was updated in the fit, calculate the difference
+            if (old_lj_params["sigma"] != lj_params["sigma"]).any():
+                diff["Delta_sig"] = lj_params["sigma"] - old_lj_params["sigma"]
+
             # info
-            print_lj_params(params_to_df(fit_out.params), c + 1)  # type: ignore
-            plot_fit(
-                fit_out.params,
-                geolist,
-                df_energy,
-                monomer_a,
-                monomer_b,
-                orientation[i],
-                c + 1,
-            )
+            print_lj_params(diff, c)
 
-            # update the parameters
-            new_fit_params = Parameters()
-            for j in range(len(geolist)):
-                new_fit_params.add(
-                    fit_out.params[f"epsilon_CG_B_{j}"].name,
-                    value=fit_out.params[f"epsilon_CG_B_{j}"].value,
-                    max=1.1 * fit_out.params[f"epsilon_CG_B_{j}"].value,
-                    min=0.9 * fit_out.params[f"epsilon_CG_B_{j}"].value,
-                    vary=c % 2 == 0,
+            if c % 5 == 0:
+                plot_fit(
+                    fit_out.params,
+                    geolist,
+                    df_energy,
+                    monomer_a,
+                    monomer_b,
+                    orientation[i],
+                    c,
                 )
-                new_fit_params.add(
-                    fit_out.params[f"sigma_CG_B_{j}"].name,
-                    value=fit_out.params[f"sigma_CG_B_{j}"].value,
-                    max=1.1 * fit_out.params[f"sigma_CG_B_{j}"].value,
-                    min=0.9 * fit_out.params[f"sigma_CG_B_{j}"].value,
-                    vary=c % 2 == 1,
-                )
-                new_fit_params.add(
-                    fit_out.params[f"epsilon_CG_FB_{j}"].name,
-                    value=fit_out.params[f"epsilon_CG_FB_{j}"].value,
-                    max=1.1 * fit_out.params[f"epsilon_CG_FB_{j}"].value,
-                    min=0.9 * fit_out.params[f"epsilon_CG_FB_{j}"].value,
-                    vary=c % 2 == 0,
-                )
-                new_fit_params.add(
-                    fit_out.params[f"sigma_CG_FB_{j}"].name,
-                    value=fit_out.params[f"sigma_CG_FB_{j}"].value,
-                    max=1.1 * fit_out.params[f"sigma_CG_FB_{j}"].value,
-                    min=0.9 * fit_out.params[f"sigma_CG_FB_{j}"].value,
-                    vary=c % 2 == 1,
-                )
-                if j > 0:
-                    new_fit_params[f"epsilon_CG_B_{j}"].expr = f"epsilon_CG_B_0"
-                    new_fit_params[f"sigma_CG_B_{j}"].expr = f"sigma_CG_B_0"
-                    new_fit_params[f"epsilon_CG_FB_{j}"].expr = f"epsilon_CG_FB_0"
-                    new_fit_params[f"sigma_CG_FB_{j}"].expr = f"sigma_CG_FB_0"
 
-            # calculate difference between the parameters
-            df_diff = params_to_df(new_fit_params)
-            df_diff[["epsilon", "sigma"]] = (
-                df_diff[["epsilon", "sigma"]]
-                - params_to_df(fit_params)[["epsilon", "sigma"]]
-            )
-            print("Difference between the parameters:")
-            print(df_diff)
+            # generate the new parameters
+            new_fit_params = update_params(fit_params, diff, c)
+
+            # # update the parameters
+            # new_fit_params = Parameters()
+            # min_shift = 0.1 if c < 25 else 0.05
+            # max_shift = 0.1 if c < 25 else 0.05
+
+            # for j in range(len(geolist)):
+            #     new_fit_params.add(
+            #         fit_out.params[f"epsilon_CG_B_{j}"].name,
+            #         value=fit_out.params[f"epsilon_CG_B_{j}"].value,
+            #         max=(1 + max_shift) * fit_out.params[f"epsilon_CG_B_{j}"].value,
+            #         min=(1 - min_shift) * fit_out.params[f"epsilon_CG_B_{j}"].value,
+            #         vary=(
+            #             False
+            #             if np.abs(diff["Delta_eps"][0]) < 0.01 and c > 3
+            #             else True if (c % 2) == 1 else False
+            #         ),
+            #     )
+            #     new_fit_params.add(
+            #         fit_out.params[f"sigma_CG_B_{j}"].name,
+            #         value=fit_out.params[f"sigma_CG_B_{j}"].value,
+            #         max=(1 + max_shift) * fit_out.params[f"sigma_CG_B_{j}"].value,
+            #         min=(1 - min_shift) * fit_out.params[f"sigma_CG_B_{j}"].value,
+            #         vary=(
+            #             False
+            #             if np.abs(diff["Delta_sig"][0]) < 0.1 and c > 3
+            #             else True if (c % 2) == 1 else False
+            #         ),
+            #     )
+            #     new_fit_params.add(
+            #         fit_out.params[f"epsilon_CG_FB_{j}"].name,
+            #         value=fit_out.params[f"epsilon_CG_FB_{j}"].value,
+            #         max=(1 + max_shift) * fit_out.params[f"epsilon_CG_FB_{j}"].value,
+            #         min=(1 - min_shift) * fit_out.params[f"epsilon_CG_FB_{j}"].value,
+            #         vary=(
+            #             False
+            #             if np.abs(diff["Delta_eps"][1]) < 0.01 and c > 3
+            #             else True if (c % 2) == 0 else False
+            #         ),
+            #     )
+            #     new_fit_params.add(
+            #         fit_out.params[f"sigma_CG_FB_{j}"].name,
+            #         value=fit_out.params[f"sigma_CG_FB_{j}"].value,
+            #         max=(1 + max_shift) * fit_out.params[f"sigma_CG_FB_{j}"].value,
+            #         min=(1 - min_shift) * fit_out.params[f"sigma_CG_FB_{j}"].value,
+            #         vary=(
+            #             False
+            #             if np.abs(diff["Delta_sig"][1]) < 0.1 and c > 3
+            #             else True if (c % 2) == 0 else False
+            #         ),
+            #     )
+            #     if j > 0:
+            #         new_fit_params[f"epsilon_CG_B_{j}"].expr = f"epsilon_CG_B_0"
+            #         new_fit_params[f"sigma_CG_B_{j}"].expr = f"sigma_CG_B_0"
+            #         new_fit_params[f"epsilon_CG_FB_{j}"].expr = f"epsilon_CG_FB_0"
+            #         new_fit_params[f"sigma_CG_FB_{j}"].expr = f"sigma_CG_FB_0"
+
+            # # if all parameters are not varying, break the loop
+            # if not any([new_fit_params[p].vary for p in new_fit_params.keys()]):
+            #     print("All parameters are not varying. Stopping the fit.")
+            #     break
 
             # update the parameters
             fit_params = new_fit_params
+            old_lj_params = lj_params.copy()
+            lj_params = params_to_df(fit_params)

@@ -124,15 +124,18 @@ def print_lj_params(df: pd.DataFrame, i: int) -> None:
     Parameters
     ----------
     df : pd.DataFrame
-        DataFrame containing the lj parameters in a.u., with columns ['atom_pair', 'epsilon', 'sigma']
+        DataFrame containing the lj parameters in a.u., with columns ['atom_pair', 'epsilon', 'sigma', 'Delta_eps', 'Delta_sig']
     i : int
         Iteration number
     """
-    df["epsilon"] *= EH2KCAL
-    df["sigma"] /= ANGSTROM2BOHR
+    # make a copy of the DataFrame
+    dc = df.copy()
+    dc[["epsilon", "Delta_eps"]] *= EH2KCAL
+    dc[["sigma", "Delta_sig"]] /= ANGSTROM2BOHR
 
-    print(f"LJ paramters: Iteration {i}")
-    print(df.to_string(index=False), "\n")
+    print(f"Iteration {i}")
+    print("------------")
+    print(dc.to_string(index=False), "\n")
 
 
 def params_to_df(params: Parameters) -> pd.DataFrame:
