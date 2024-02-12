@@ -139,7 +139,7 @@ def get_residuals(params: Parameters, filelist: List[Path], data: pd.Series) -> 
     return residuals
 
 
-def get_clap_params(filelist: List[str | Path]) -> pd.DataFrame:
+def get_start_params(filelist: List[str | Path]) -> pd.DataFrame:
     """Generate a DataFrame with initial Lennard-Jones parameters for a fit.
 
     Parameters
@@ -155,17 +155,64 @@ def get_clap_params(filelist: List[str | Path]) -> pd.DataFrame:
         Sigma and epsilon are output in a.u.
     """
 
-    # LJ parameters, taken from the CL&P force field
-    epsilon_clap = {  # 'atom_A-atom_B': epsilon in kcal/mol
-        "CG-B": 0.34120,  # C(Graphene) - B(BF4-)
-        "CG-FB": 0.27339,  # C(Graphene) - F(BF4-)
-        "CG-NA": 0.45642,  # C(Graphene) - N(Imidazolium)
-        "CG-CR": 0.29288,  # C(Graphene) - CR(Imidazolium)
-        "CG-CW": 0.29288,  # C(Graphene) - CW(Imidazolium)
-        "CG-C1": 0.28439,  # C(Graphene) - C1(Imidazolium)
-        "CG-HCR": 0.19173,  # C(Graphene) - HCR(Imidazolium)
-        "CG-HCW": 0.19173,  # C(Graphene) - HCW(Imidazolium)
-        "CG-HC": 0.19173,  # C(Graphene) - HC(Imidazolium side chain)
+    # # LJ parameters, taken from the CL&P force field
+    # epsilon_start = {  # 'atom_A-atom_B': epsilon in kcal/mol
+    #     "CG-B":  0.34120,  # C(Graphene) - B(BF4-)
+    #     "CG-FB": 0.27339,  # C(Graphene) - F(BF4-)
+    #     "CG-NA": 0.45642,  # C(Graphene) - N(Imidazolium)
+    #     "CG-CR": 0.29288,  # C(Graphene) - CR(Imidazolium)
+    #     "CG-CW": 0.29288,  # C(Graphene) - CW(Imidazolium)
+    #     "CG-C1": 0.28439,  # C(Graphene) - C1(Imidazolium)
+    #     "CG-HCR": 0.19173,  # C(Graphene) - HCR(Imidazolium)
+    #     "CG-HCW": 0.19173,  # C(Graphene) - HCW(Imidazolium)
+    #     "CG-HC": 0.19173,  # C(Graphene) - HC(Imidazolium side chain)
+    #     # no LJ parameters for H atoms on graphene-like structures
+    #     "HG-B": 0.0,  # H(Graphene) - B(BF4-)
+    #     "HG-FB": 0.0,  # H(Graphene) - F(BF4-)
+    #     "HG-NA": 0.0,  # H(Graphene) - N(Imidazolium)
+    #     "HG-CR": 0.0,  # H(Graphene) - CR(Imidazolium)
+    #     "HG-CW": 0.0,  # H(Graphene) - CW(Imidazolium)
+    #     "HG-C1": 0.0,  # H(Graphene) - C1(Imidazolium)
+    #     "HG-HCR": 0.0,  # H(Graphene) - HCR(Imidazolium)
+    #     "HG-HCW": 0.0,  # H(Graphene) - HCW(Imidazolium)
+    #     "HG-HC": 0.0,  # H(Graphene) - HC(Imidazolium side chain)
+    # }
+
+    # sigma_start = {  # 'atom_A-atom_B': sigma in Angstrom
+    #     "CG-B": 3.0,  # 3.565,  # C(Graphene) - B(BF4-)
+    #     "CG-FB": 3.2,  # 3.335,  # C(Graphene) - F(BF4-)
+    #     "CG-NA": 3.400,  # C(Graphene) - N(Imidazolium)
+    #     "CG-CR": 3.550,  # C(Graphene) - CR(Imidazolium)
+    #     "CG-CW": 3.550,  # C(Graphene) - CW(Imidazolium)
+    #     "CG-C1": 3.525,  # C(Graphene) - C1(Imidazolium)
+    #     "CG-HCR": 2.985,  # C(Graphene) - HCR(Imidazolium)
+    #     "CG-HCW": 2.985,  # C(Graphene) - HCW(Imidazolium)
+    #     "CG-HC": 3.125,  # C(Graphene) - HC(Imidazolium side chain)
+    #     # no LJ parameters for H atoms on graphene-like structures
+    #     "HG-B": 0.0,  # H(Graphene) - B(BF4-)
+    #     "HG-FB": 0.0,  # H(Graphene) - F(BF4-)
+    #     "HG-NA": 0.0,  # H(Graphene) - N(Imidazolium)
+    #     "HG-CR": 0.0,  # H(Graphene) - CR(Imidazolium)
+    #     "HG-CW": 0.0,  # H(Graphene) - CW(Imidazolium)
+    #     "HG-C1": 0.0,  # H(Graphene) - C1(Imidazolium)
+    #     "HG-HCR": 0.0,  # H(Graphene) - HCR(Imidazolium)
+    #     "HG-HCW": 0.0,  # H(Graphene) - HCW(Imidazolium)
+    #     "HG-HC": 0.0,  # H(Graphene) - HC(Imidazolium side chain)
+    # }
+
+    # LJ parameters, serving as start points for fit.
+    # epsilon values taken based on Ref: 10.1039/c8cp01677a
+    # the polarizabilities from table 3 are taken, rounded and divided by 4 as the epsilon values
+    epsilon_start = {  # 'atom_A-atom_B': epsilon in kcal/mol
+        "CG-B": 0.1445,  # C(Graphene) - B(BF4-)
+        "CG-FB": 0.1745,  # C(Graphene) - F(BF4-)
+        "CG-NA": 0.2800,  # C(Graphene) - N(Imidazolium)
+        "CG-CR": 0.2625,  # C(Graphene) - CR(Imidazolium)
+        "CG-CW": 0.2625,  # C(Graphene) - CW(Imidazolium)
+        "CG-C1": 0.26,  # C(Graphene) - C1(Imidazolium)
+        "CG-HCR": 0.07,  # C(Graphene) - HCR(Imidazolium)
+        "CG-HCW": 0.07,  # C(Graphene) - HCW(Imidazolium)
+        "CG-HC": 0.07,  # C(Graphene) - HC(Imidazolium side chain)
         # no LJ parameters for H atoms on graphene-like structures
         "HG-B": 0.0,  # H(Graphene) - B(BF4-)
         "HG-FB": 0.0,  # H(Graphene) - F(BF4-)
@@ -178,16 +225,16 @@ def get_clap_params(filelist: List[str | Path]) -> pd.DataFrame:
         "HG-HC": 0.0,  # H(Graphene) - HC(Imidazolium side chain)
     }
 
-    sigma_clap = {  # 'atom_A-atom_B': sigma in Angstrom
-        "CG-B": 3.565,  # C(Graphene) - B(BF4-)
-        "CG-FB": 3.335,  # C(Graphene) - F(BF4-)
-        "CG-NA": 3.400,  # C(Graphene) - N(Imidazolium)
-        "CG-CR": 3.550,  # C(Graphene) - CR(Imidazolium)
-        "CG-CW": 3.550,  # C(Graphene) - CW(Imidazolium)
-        "CG-C1": 3.525,  # C(Graphene) - C1(Imidazolium)
-        "CG-HCR": 2.985,  # C(Graphene) - HCR(Imidazolium)
-        "CG-HCW": 2.985,  # C(Graphene) - HCW(Imidazolium)
-        "CG-HC": 3.125,  # C(Graphene) - HC(Imidazolium side chain)
+    sigma_start = {  # 'atom_A-atom_B': sigma in Angstrom
+        "CG-B": 3.0,  # 3.565,  # C(Graphene) - B(BF4-)
+        "CG-FB": 3.2,  # 3.335,  # C(Graphene) - F(BF4-)
+        "CG-NA": 3.20,  # C(Graphene) - N(Imidazolium)
+        "CG-CR": 3.3,  # C(Graphene) - CR(Imidazolium)
+        "CG-CW": 3.3,  # C(Graphene) - CW(Imidazolium)
+        "CG-C1": 3.5,  # C(Graphene) - C1(Imidazolium)
+        "CG-HCR": 2.7,  # C(Graphene) - HCR(Imidazolium)
+        "CG-HCW": 2.7,  # C(Graphene) - HCW(Imidazolium)
+        "CG-HC": 2.9,  # C(Graphene) - HC(Imidazolium side chain)
         # no LJ parameters for H atoms on graphene-like structures
         "HG-B": 0.0,  # H(Graphene) - B(BF4-)
         "HG-FB": 0.0,  # H(Graphene) - F(BF4-)
@@ -220,8 +267,8 @@ def get_clap_params(filelist: List[str | Path]) -> pd.DataFrame:
         l_params.append(
             [
                 f"{pair[0]}_{pair[1]}",
-                epsilon_clap[f"{pair[0]}-{pair[1]}"] / EH2KCAL,
-                sigma_clap[f"{pair[0]}-{pair[1]}"] * ANGSTROM2BOHR,
+                epsilon_start[f"{pair[0]}-{pair[1]}"] / EH2KCAL,
+                sigma_start[f"{pair[0]}-{pair[1]}"] * ANGSTROM2BOHR,
             ]
         )
 
@@ -344,66 +391,80 @@ def scaling(kind: str, param: str, i: int) -> float:
 
 
 def update_params(
-    fit_params: Parameters, diff_lj_params: pd.DataFrame, i: int
+    fit_result: Parameters, n_params: int, atom_pairs: List[str], i: int
 ) -> Parameters:
     """Update the parameters of the fit.
 
     Parameters
     ----------
-    fit_params : Parameters
-        Parameters object with the Lennard-Jones parameters to fit.
-    diff_lj_params : pd.DataFrame
-        DataFrame with the current Lennard-Jones parameters as well as the differences to the previous iteration.
+    fit_result : Parameters
+        Parameters object with the result of the fit.
+        Used to update generate parameters.
+    n_params : int
+        Number of independent parameters.
+    atom_pairs:
+        List of atom pairs.
     i : int
         Iteration number.
 
     Returns
     -------
     Parameters
-        Updated parameters of the fit.
+        Updated parameters, used for the next iteration.
     """
-    # number of parameters
-    n_params = len(diff_lj_params)
     # number of parameter sets
-    n_sets = len(fit_params) // (n_params * 2)
+    n_sets = len(fit_result) // (n_params * 2)
     # instantiate the new Parameters object
-    new_fit_params = Parameters()
+    new_params = Parameters()
 
     # generate the new parameters
     for j in range(n_sets):
         for k in range(n_params):
-            # determine which parameters are varying
+            if k == 0:
+                # first epsilon is set, the other epsilons are dependent on the first one
+                new_params.add(
+                    f"epsilon_{atom_pairs[k]}_{j}",
+                    value=fit_result[f"epsilon_{atom_pairs[k]}_{j}"].value,
+                    min=fit_result[f"epsilon_{atom_pairs[k]}_{j}"].value
+                    * scaling("min", "epsilon", i),
+                    max=fit_result[f"epsilon_{atom_pairs[k]}_{j}"].value
+                    * scaling("max", "epsilon", i),
+                    vary=(k == i or i % n_params == k),
+                )
+            else:
+                # all other epsilons are dependent on the first one,
+                # the parameters were previosly sorted in ascending order
+                # with respect to their polarizability
+                new_params.add(
+                    f"epsilon_{atom_pairs[k]}_{j}",
+                    value=fit_result[f"epsilon_{atom_pairs[k]}_{j}"].value,
+                    min=fit_result[f"epsilon_{atom_pairs[k-1]}_{j}"].value,
+                    max=fit_result[f"epsilon_{atom_pairs[k]}_{j}"].value
+                    * scaling("max", "epsilon", i),
+                    vary=(k == i or i % n_params == k),
+                )
 
-            new_fit_params.add(
-                fit_params[f"epsilon_{diff_lj_params['atom_pair'][k]}_{j}"].name,
-                value=fit_params[f"epsilon_{diff_lj_params['atom_pair'][k]}_{j}"].value
-                + diff_lj_params["Delta_eps"][k],
-                max=fit_params[f"epsilon_{diff_lj_params['atom_pair'][k]}_{j}"]
-                * scaling("max", "epsilon", i),
-                min=fit_params[f"epsilon_{diff_lj_params['atom_pair'][k]}_{j}"]
-                * scaling("min", "epsilon", i),
-                vary=True if (i + 1 - k) % 2 == 0 else False,
-            )
-            new_fit_params.add(
-                fit_params[f"sigma_{diff_lj_params['atom_pair'][k]}_{j}"].name,
-                value=fit_params[f"sigma_{diff_lj_params['atom_pair'][k]}_{j}"].value
-                + diff_lj_params["Delta_sig"][k],
-                max=fit_params[f"sigma_{diff_lj_params['atom_pair'][k]}_{j}"]
-                * scaling("max", "sigma", i),
-                min=fit_params[f"sigma_{diff_lj_params['atom_pair'][k]}_{j}"]
+            new_params.add(
+                f"sigma_{atom_pairs[k]}_{j}",
+                value=fit_result[f"sigma_{atom_pairs[k]}_{j}"].value,
+                min=fit_result[f"sigma_{atom_pairs[k]}_{j}"].value
                 * scaling("min", "sigma", i),
-                vary=True if (i + 1 - k) % 2 == 0 else False,
+                max=fit_result[f"sigma_{atom_pairs[k]}_{j}"].value
+                * scaling("max", "sigma", i),
+                vary=(k == i or i % n_params == k),
             )
+            # make sure that the LJ params are consistent amont the different fit sets
             if j > 0:
-                new_fit_params[f"epsilon_{diff_lj_params['atom_pair'][k]}_{j}"].expr = (
-                    f"epsilon_{diff_lj_params['atom_pair'][k]}_0"
+                new_params[f"epsilon_{atom_pairs[k]}_{j}"].expr = (
+                    f"epsilon_{atom_pairs[k]}_0"
                 )
-                new_fit_params[f"sigma_{diff_lj_params['atom_pair'][k]}_{j}"].expr = (
-                    f"sigma_{diff_lj_params['atom_pair'][k]}_0"
+                new_params[f"sigma_{atom_pairs[k]}_{j}"].expr = (
+                    f"sigma_{atom_pairs[k]}_0"
                 )
-            # debug
-            # print(True if (i + 1 - k) % 2 == 0 else False)
-    return new_fit_params
+        # eps(CG_B) must be > eps(CG_FB)
+        new_params[f"epsilon_CG_B_{j}"].max = new_params[f"epsilon_CG_FB_{j}"].value
+
+    return new_params
 
 
 def fit_lj_params(monomer_a: str, monomer_b: str, orientation: List[str]) -> None:
@@ -438,14 +499,13 @@ def fit_lj_params(monomer_a: str, monomer_b: str, orientation: List[str]) -> Non
     ]
 
     for i in range(len(orientation)):
-        # get list of files
+        # get list of files corresponding to the current orientation
         geolist = ll_all[i]
 
         # read energy file
         df_energy = pd.read_csv(ff_all[i], sep=";")
 
         # drop the all rows with e_lj > 5
-        # save the number of rows to a variable
         # remove as many rows from the beginning of geolist as there were rows dropped from the dataframe
         df_energy = df_energy[df_energy["e_pair"] < 5]
         while len(geolist) > len(df_energy):
@@ -455,24 +515,31 @@ def fit_lj_params(monomer_a: str, monomer_b: str, orientation: List[str]) -> Non
         df_energy.reset_index(drop=True, inplace=True)
 
         # generate starting parameters for the fit
-        clap_params = get_clap_params(geolist)  # type: ignore
+        start_params = get_start_params(geolist)  # type: ignore
+        # sort the DataFrame by epsilon in increasing order
+        start_params.sort_values(by="epsilon", inplace=True)
+        n_params = len(start_params)
+        atom_pairs = start_params["atom_pair"].to_list()
 
         # instantiate the Parameters object
         fit_params = Parameters()
 
         for j in range(len(geolist)):
-            for _, row in clap_params.iterrows():
+            for k, row in start_params.iterrows():
+                vary_param = True if k == 0 else False
                 fit_params.add(
                     f"epsilon_{row['atom_pair']}_{j}",
-                    value=0.85 * row["epsilon"],
-                    vary=False,
+                    value=row["epsilon"],
+                    min=0.9 * row["epsilon"],
+                    max=1.1 * row["epsilon"],
+                    vary=vary_param,
                 )
                 fit_params.add(
                     f"sigma_{row['atom_pair']}_{j}",
-                    value=0.85 * row["sigma"],
-                    min=0.5 * row["sigma"],
-                    max=0.9 * row["sigma"],
-                    vary=True,
+                    value=row["sigma"],
+                    min=0.9 * row["sigma"],
+                    max=1.1 * row["sigma"],
+                    vary=vary_param,
                 )
                 # make sure that the LJ params are consistent amont the different fit sets
                 if j > 0:
@@ -483,20 +550,13 @@ def fit_lj_params(monomer_a: str, monomer_b: str, orientation: List[str]) -> Non
                         f"sigma_{row['atom_pair']}_0"
                     )
 
-        lj_params = params_to_df(fit_params)
-
         # info
         print(f"Starting the fit for {monomer_b}-{monomer_a}/{orientation[i]}.\n")
 
-        # initialize difference DataFrame for printing
-        old_lj_params = lj_params.copy()
-        diff = lj_params.copy()
-        diff["Delta_eps"] = np.zeros(len(lj_params))
-        diff["Delta_sig"] = np.zeros(len(lj_params))
-        print_lj_params(diff, 0)
+        print_lj_params(params_to_df(fit_params), 0)
 
         # fitting loop
-        for c in range(1, 20):
+        for c in range(1, 51):
 
             # perform fit
             fit_out = minimize(
@@ -506,23 +566,14 @@ def fit_lj_params(monomer_a: str, monomer_b: str, orientation: List[str]) -> Non
                 method="least_squares",
             )
 
-            # print the current parameters
-            # first, copy the current parameters to a new DataFrame
-            lj_params = params_to_df(fit_out.params)
-            diff[["epsilon", "sigma"]] = lj_params[["epsilon", "sigma"]]
-            # if epsilon was updated in the fit, calculate the difference
-            if (old_lj_params["epsilon"] != lj_params["epsilon"]).any():
-                diff["Delta_eps"] = lj_params["epsilon"] - old_lj_params["epsilon"]
-            # if sigma was updated in the fit, calculate the difference
-            if (old_lj_params["sigma"] != lj_params["sigma"]).any():
-                diff["Delta_sig"] = lj_params["sigma"] - old_lj_params["sigma"]
+            print_lj_params(params_to_df(fit_out.params), c)  # type: ignore
 
-            # info
-            print_lj_params(diff, c)
+            # generate the new parameters
+            fit_params = update_params(fit_out.params, n_params, atom_pairs, c)  # type: ignore
 
             if c % 5 == 0:
                 plot_fit(
-                    fit_out.params,
+                    fit_out.params,  # type: ignore
                     geolist,
                     df_energy,
                     monomer_a,
@@ -530,72 +581,3 @@ def fit_lj_params(monomer_a: str, monomer_b: str, orientation: List[str]) -> Non
                     orientation[i],
                     c,
                 )
-
-            # generate the new parameters
-            new_fit_params = update_params(fit_params, diff, c)
-
-            # # update the parameters
-            # new_fit_params = Parameters()
-            # min_shift = 0.1 if c < 25 else 0.05
-            # max_shift = 0.1 if c < 25 else 0.05
-
-            # for j in range(len(geolist)):
-            #     new_fit_params.add(
-            #         fit_out.params[f"epsilon_CG_B_{j}"].name,
-            #         value=fit_out.params[f"epsilon_CG_B_{j}"].value,
-            #         max=(1 + max_shift) * fit_out.params[f"epsilon_CG_B_{j}"].value,
-            #         min=(1 - min_shift) * fit_out.params[f"epsilon_CG_B_{j}"].value,
-            #         vary=(
-            #             False
-            #             if np.abs(diff["Delta_eps"][0]) < 0.01 and c > 3
-            #             else True if (c % 2) == 1 else False
-            #         ),
-            #     )
-            #     new_fit_params.add(
-            #         fit_out.params[f"sigma_CG_B_{j}"].name,
-            #         value=fit_out.params[f"sigma_CG_B_{j}"].value,
-            #         max=(1 + max_shift) * fit_out.params[f"sigma_CG_B_{j}"].value,
-            #         min=(1 - min_shift) * fit_out.params[f"sigma_CG_B_{j}"].value,
-            #         vary=(
-            #             False
-            #             if np.abs(diff["Delta_sig"][0]) < 0.1 and c > 3
-            #             else True if (c % 2) == 1 else False
-            #         ),
-            #     )
-            #     new_fit_params.add(
-            #         fit_out.params[f"epsilon_CG_FB_{j}"].name,
-            #         value=fit_out.params[f"epsilon_CG_FB_{j}"].value,
-            #         max=(1 + max_shift) * fit_out.params[f"epsilon_CG_FB_{j}"].value,
-            #         min=(1 - min_shift) * fit_out.params[f"epsilon_CG_FB_{j}"].value,
-            #         vary=(
-            #             False
-            #             if np.abs(diff["Delta_eps"][1]) < 0.01 and c > 3
-            #             else True if (c % 2) == 0 else False
-            #         ),
-            #     )
-            #     new_fit_params.add(
-            #         fit_out.params[f"sigma_CG_FB_{j}"].name,
-            #         value=fit_out.params[f"sigma_CG_FB_{j}"].value,
-            #         max=(1 + max_shift) * fit_out.params[f"sigma_CG_FB_{j}"].value,
-            #         min=(1 - min_shift) * fit_out.params[f"sigma_CG_FB_{j}"].value,
-            #         vary=(
-            #             False
-            #             if np.abs(diff["Delta_sig"][1]) < 0.1 and c > 3
-            #             else True if (c % 2) == 0 else False
-            #         ),
-            #     )
-            #     if j > 0:
-            #         new_fit_params[f"epsilon_CG_B_{j}"].expr = f"epsilon_CG_B_0"
-            #         new_fit_params[f"sigma_CG_B_{j}"].expr = f"sigma_CG_B_0"
-            #         new_fit_params[f"epsilon_CG_FB_{j}"].expr = f"epsilon_CG_FB_0"
-            #         new_fit_params[f"sigma_CG_FB_{j}"].expr = f"sigma_CG_FB_0"
-
-            # # if all parameters are not varying, break the loop
-            # if not any([new_fit_params[p].vary for p in new_fit_params.keys()]):
-            #     print("All parameters are not varying. Stopping the fit.")
-            #     break
-
-            # update the parameters
-            fit_params = new_fit_params
-            old_lj_params = lj_params.copy()
-            lj_params = params_to_df(fit_params)

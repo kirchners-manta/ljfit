@@ -130,8 +130,8 @@ def print_lj_params(df: pd.DataFrame, i: int) -> None:
     """
     # make a copy of the DataFrame
     dc = df.copy()
-    dc[["epsilon", "Delta_eps"]] *= EH2KCAL
-    dc[["sigma", "Delta_sig"]] /= ANGSTROM2BOHR
+    dc["epsilon"] *= EH2KCAL
+    dc["sigma"] /= ANGSTROM2BOHR
 
     print(f"Iteration {i}")
     print("------------")
