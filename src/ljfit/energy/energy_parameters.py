@@ -10,14 +10,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-
 from .. import __version__
-
 from .calc_energy import extract_energy
 
 
 def get_system_energy(
     system: str,
+    print_level: int,
 ) -> None:
     """Get the interaction energy between two monomers, and derive further energies.
 
@@ -25,6 +24,8 @@ def get_system_energy(
     ----------
     system : str
         The name of the system to be considered.
+    print_level : int
+        The level of verbosity for the output.
     """
 
     # define the systems

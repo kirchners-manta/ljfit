@@ -7,13 +7,13 @@ Useful functions for the ljfit package.
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
 from typing import List, Optional, Union
+
 import matplotlib.pyplot as plt
 import pandas as pd
-from pathlib import Path
-import sys
 from lmfit import Parameters
-
 
 from .. import __version__
 
@@ -117,7 +117,7 @@ def combine_xyz(
     return combined
 
 
-def print_lj_params(df: pd.DataFrame, i: int) -> None:
+def print_lj_params(df: pd.DataFrame, i: int) -> List[str]:
     """Write the lj parameters to the console in common units.
     That is, convert the parameters from atomic units to kcal/mol and Angstrom.
 
@@ -133,9 +133,19 @@ def print_lj_params(df: pd.DataFrame, i: int) -> None:
     dc["epsilon"] *= EH2KCAL
     dc["sigma"] /= ANGSTROM2BOHR
 
-    print(f"Iteration {i}")
-    print("------------")
-    print(dc.to_string(index=False), "\n")
+    if i == -1:
+        return [
+            "Final LJ parameters",
+            "-------------------",
+            "kcal/mol / Angstrom",
+            dc.to_string(index=False, float_format="{:.4f}".format),
+        ]
+    else:
+        return [
+            f"Iteration {i}",
+            "------------",
+            dc.to_string(index=False),
+        ]
 
 
 def params_to_df(params: Parameters) -> pd.DataFrame:
@@ -163,3 +173,56 @@ def params_to_df(params: Parameters) -> pd.DataFrame:
     df_params = pd.DataFrame(l_params, columns=["atom_pair", "epsilon", "sigma"])
 
     return df_params
+
+
+def custom_print(string: str | List[str], level: int, print_level: int) -> None:
+    """Custom print function with different verbosity levels
+
+    Parameters
+    ----------
+    string : str | list[str]
+        String or list of strings to be printed
+    level : int
+        Level of the string
+    print_level : int
+        Level of verbosity
+    """
+    if print_level >= level:
+        if isinstance(string, list):
+            for s in string:
+                print(s)
+        else:
+            print(string)
+
+
+def write_params_to_csv(
+    df: pd.DataFrame, orientation: str, i: int, outdir: str | Path = "./ljfit/data"
+) -> None:
+    """Writes the parameters to a csv file
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame containing the lj parameters in a.u., with columns ['atom_pair', 'epsilon', 'sigma']
+    orientation : str
+        Orientation of the monomers
+    i : int
+        Iteration number
+    outdir : str | Path
+        Output directory
+    """
+    # make a copy of the DataFrame
+    dc = df.copy()
+    dc["epsilon"] *= EH2KCAL
+    dc["sigma"] /= ANGSTROM2BOHR
+
+    # generate directory if it does not exist
+    Path(outdir).mkdir(parents=True, exist_ok=True)
+    # specify output path
+    if i == -1:
+        outpath = Path(outdir) / f"lj_params_{orientation}_final.csv"
+    else:
+        outpath = Path(outdir) / f"lj_params_{orientation}_{i}.csv"
+    # write DataFrame to csv
+    dc.to_csv(outpath, index=False)
+    print(f"Parameters written to {outpath}")

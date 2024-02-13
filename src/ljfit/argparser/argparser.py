@@ -192,7 +192,7 @@ class Formatter(argparse.HelpFormatter):
 
 
 # custom parser
-def parser(name: str = "ljfit", **kwargs) -> argparse.ArgumentParser:
+def parser(name: str = "ljfit", **kwargs) -> argparse.ArgumentParser:  # type: ignore
     """
     Parses the command line arguments.
 
@@ -230,6 +230,14 @@ def parser(name: str = "ljfit", **kwargs) -> argparse.ArgumentParser:
         action="store_true",
         help="Fit LJ parameters.",
         default=False,
+    )
+    p.add_argument(
+        "-p",
+        "--print",
+        type=int,
+        default=1,
+        choices=[0, 1, 2, 3],
+        help="Print level. 0: no print, 1: minimal print, 2: detailed print, 3: debug print.",
     )
     p.add_argument(
         "-s",

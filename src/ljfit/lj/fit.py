@@ -7,20 +7,24 @@ Fit Lennard-Jones parameters to a system of monomers.
 
 from __future__ import annotations
 
-from typing import List, Optional, Union
 import itertools
-from lmfit import Parameters, minimize, report_fit
-import numpy as np
-import pandas as pd
 from pathlib import Path
-from scipy.spatial import distance_matrix
-from ..helpers import get_file_list, print_lj_params, params_to_df
-import matplotlib.pyplot as plt
-import sys
+from typing import List, Tuple
 
+import matplotlib.pyplot as plt
+import pandas as pd
+from lmfit import Parameters, minimize
+from scipy.spatial import distance_matrix
 
 from .. import __version__
 from ..energy import get_xyz_from_sapt
+from ..helpers import (
+    get_file_list,
+    params_to_df,
+    print_lj_params,
+    custom_print,
+    write_params_to_csv,
+)
 
 # define constants
 EH2KCAL = 627.503  # kcal/mol
@@ -108,7 +112,9 @@ def lj_dataset(params: Parameters, i: int, file: str | Path) -> float:
     return get_e_lj(file, epsilon, sigma)
 
 
-def get_residuals(params: Parameters, filelist: List[Path], data: pd.Series) -> List:
+def get_residuals(
+    params: Parameters, filelist: List[Path], data: pd.Series
+) -> List[float]:
     """Objective function for the Lennard-Jones parameter fitting.
 
     Parameters
@@ -139,7 +145,7 @@ def get_residuals(params: Parameters, filelist: List[Path], data: pd.Series) -> 
     return residuals
 
 
-def get_start_params(filelist: List[str | Path]) -> pd.DataFrame:
+def get_start_params(filelist: List[str | Path]) -> Tuple[Parameters, List[str]]:
     """Generate a DataFrame with initial Lennard-Jones parameters for a fit.
 
     Parameters
@@ -150,55 +156,11 @@ def get_start_params(filelist: List[str | Path]) -> pd.DataFrame:
 
     Returns
     -------
-    pd.DataFrame
-        DataFrame with initial Lennard-Jones parameters for a fit.
-        Sigma and epsilon are output in a.u.
+    Parameters
+        Initial parameters for the fit.
+    List[str]
+        List of atom pairs.
     """
-
-    # # LJ parameters, taken from the CL&P force field
-    # epsilon_start = {  # 'atom_A-atom_B': epsilon in kcal/mol
-    #     "CG-B":  0.34120,  # C(Graphene) - B(BF4-)
-    #     "CG-FB": 0.27339,  # C(Graphene) - F(BF4-)
-    #     "CG-NA": 0.45642,  # C(Graphene) - N(Imidazolium)
-    #     "CG-CR": 0.29288,  # C(Graphene) - CR(Imidazolium)
-    #     "CG-CW": 0.29288,  # C(Graphene) - CW(Imidazolium)
-    #     "CG-C1": 0.28439,  # C(Graphene) - C1(Imidazolium)
-    #     "CG-HCR": 0.19173,  # C(Graphene) - HCR(Imidazolium)
-    #     "CG-HCW": 0.19173,  # C(Graphene) - HCW(Imidazolium)
-    #     "CG-HC": 0.19173,  # C(Graphene) - HC(Imidazolium side chain)
-    #     # no LJ parameters for H atoms on graphene-like structures
-    #     "HG-B": 0.0,  # H(Graphene) - B(BF4-)
-    #     "HG-FB": 0.0,  # H(Graphene) - F(BF4-)
-    #     "HG-NA": 0.0,  # H(Graphene) - N(Imidazolium)
-    #     "HG-CR": 0.0,  # H(Graphene) - CR(Imidazolium)
-    #     "HG-CW": 0.0,  # H(Graphene) - CW(Imidazolium)
-    #     "HG-C1": 0.0,  # H(Graphene) - C1(Imidazolium)
-    #     "HG-HCR": 0.0,  # H(Graphene) - HCR(Imidazolium)
-    #     "HG-HCW": 0.0,  # H(Graphene) - HCW(Imidazolium)
-    #     "HG-HC": 0.0,  # H(Graphene) - HC(Imidazolium side chain)
-    # }
-
-    # sigma_start = {  # 'atom_A-atom_B': sigma in Angstrom
-    #     "CG-B": 3.0,  # 3.565,  # C(Graphene) - B(BF4-)
-    #     "CG-FB": 3.2,  # 3.335,  # C(Graphene) - F(BF4-)
-    #     "CG-NA": 3.400,  # C(Graphene) - N(Imidazolium)
-    #     "CG-CR": 3.550,  # C(Graphene) - CR(Imidazolium)
-    #     "CG-CW": 3.550,  # C(Graphene) - CW(Imidazolium)
-    #     "CG-C1": 3.525,  # C(Graphene) - C1(Imidazolium)
-    #     "CG-HCR": 2.985,  # C(Graphene) - HCR(Imidazolium)
-    #     "CG-HCW": 2.985,  # C(Graphene) - HCW(Imidazolium)
-    #     "CG-HC": 3.125,  # C(Graphene) - HC(Imidazolium side chain)
-    #     # no LJ parameters for H atoms on graphene-like structures
-    #     "HG-B": 0.0,  # H(Graphene) - B(BF4-)
-    #     "HG-FB": 0.0,  # H(Graphene) - F(BF4-)
-    #     "HG-NA": 0.0,  # H(Graphene) - N(Imidazolium)
-    #     "HG-CR": 0.0,  # H(Graphene) - CR(Imidazolium)
-    #     "HG-CW": 0.0,  # H(Graphene) - CW(Imidazolium)
-    #     "HG-C1": 0.0,  # H(Graphene) - C1(Imidazolium)
-    #     "HG-HCR": 0.0,  # H(Graphene) - HCR(Imidazolium)
-    #     "HG-HCW": 0.0,  # H(Graphene) - HCW(Imidazolium)
-    #     "HG-HC": 0.0,  # H(Graphene) - HC(Imidazolium side chain)
-    # }
 
     # LJ parameters, serving as start points for fit.
     # epsilon values taken based on Ref: 10.1039/c8cp01677a
@@ -254,25 +216,54 @@ def get_start_params(filelist: List[str | Path]) -> pd.DataFrame:
     b = b[~b["atom"].str.contains("H")]
 
     # find all unique atom pairs by atom name
-    atom_pairs = list(set(itertools.product(b["atom"], a["atom"])))
-    # sort the atom pairs in alphabetical order
-    atom_pairs = sorted(atom_pairs, key=lambda x: (x[0], x[1]))
+    atom_pairs_tuple = list(set(itertools.product(b["atom"], a["atom"])))
+    # sort the atom pairs in ascending order with respect to their epsilon
+    atom_pairs_tuple = sorted(
+        atom_pairs_tuple,
+        key=lambda x: (
+            epsilon_start[f"{x[0]}-{x[1]}"],
+            sigma_start[f"{x[0]}-{x[1]}"],
+        ),
+    )
+    # join the atom names with a _
+    atom_pairs = [f"{pair[0]}_{pair[1]}" for pair in atom_pairs_tuple]
 
-    # find the parameters for each atom pair in the CL&P dictionaries
-    # form a DataFrame with initial Lennard-Jones parameters for a fit
+    # instantiate Parameters object
+    start_params = Parameters()
+    # iterate through the files and atom pairs and assign the initial LJ parameters
+    for i, _ in enumerate(filelist):
+        for j, pair in enumerate(atom_pairs_tuple):
+            start_params.add(
+                f"epsilon_{atom_pairs[j]}_{i}",
+                value=epsilon_start[f"{pair[0]}-{pair[1]}"] / EH2KCAL,
+                max=1.1 * epsilon_start[f"{pair[0]}-{pair[1]}"] / EH2KCAL,
+                vary=(j == 0),
+            )
+            start_params.add(
+                f"sigma_{atom_pairs[j]}_{i}",
+                value=sigma_start[f"{pair[0]}-{pair[1]}"] * ANGSTROM2BOHR,
+                max=1.1 * sigma_start[f"{pair[0]}-{pair[1]}"] * ANGSTROM2BOHR,
+                vary=(j == 0),
+            )
+            # make sure that the LJ params are consistent amont the different fit sets
+            if i > 0:
+                start_params[f"epsilon_{atom_pairs[j]}_{i}"].expr = (
+                    f"epsilon_{atom_pairs[j]}_0"
+                )
+                start_params[f"sigma_{atom_pairs[j]}_{i}"].expr = (
+                    f"sigma_{atom_pairs[j]}_0"
+                )
+            # make sure that the order of the epsilon values stays the same
+            if j > 0:
+                start_params[f"epsilon_{atom_pairs[j]}_{i}"].min = start_params[
+                    f"epsilon_{atom_pairs[j-1]}_{i}"
+                ].value
+            else:
+                start_params[f"epsilon_{atom_pairs[j]}_{i}"].min = (
+                    start_params[f"epsilon_{atom_pairs[j]}_{i}"].value * 0.9
+                )
 
-    l_params = []
-    for _, pair in enumerate(atom_pairs):
-        # have _ in atom_pair name to make it a valid parameter for lmfit. - in name is not allowed
-        l_params.append(
-            [
-                f"{pair[0]}_{pair[1]}",
-                epsilon_start[f"{pair[0]}-{pair[1]}"] / EH2KCAL,
-                sigma_start[f"{pair[0]}-{pair[1]}"] * ANGSTROM2BOHR,
-            ]
-        )
-
-    return pd.DataFrame(l_params, columns=["atom_pair", "epsilon", "sigma"])
+    return [start_params, atom_pairs]
 
 
 def plot_fit(
@@ -389,10 +380,10 @@ def scaling(kind: str, param: str, i: int) -> float:
     else:
         return 0.0
 
+    return 0.0
 
-def update_params(
-    fit_result: Parameters, n_params: int, atom_pairs: List[str], i: int
-) -> Parameters:
+
+def update_params(fit_result: Parameters, atom_pairs: List[str], i: int) -> Parameters:
     """Update the parameters of the fit.
 
     Parameters
@@ -400,8 +391,6 @@ def update_params(
     fit_result : Parameters
         Parameters object with the result of the fit.
         Used to update generate parameters.
-    n_params : int
-        Number of independent parameters.
     atom_pairs:
         List of atom pairs.
     i : int
@@ -412,6 +401,8 @@ def update_params(
     Parameters
         Updated parameters, used for the next iteration.
     """
+    # number of independent parameters
+    n_params = len(atom_pairs)
     # number of parameter sets
     n_sets = len(fit_result) // (n_params * 2)
     # instantiate the new Parameters object
@@ -467,7 +458,77 @@ def update_params(
     return new_params
 
 
-def fit_lj_params(monomer_a: str, monomer_b: str, orientation: List[str]) -> None:
+def check_param_convergence(
+    fit_params: Parameters,
+    d_params: Parameters,
+    dd_params: Parameters,
+    l_params_converged: List[bool],
+    tol_epsilon: float = 5e-4,
+    tol_sigma: float = 5e-3,
+) -> bool:
+    """Check if the parameters have converged.
+
+    Parameters
+    ----------
+    fit_params : Parameters
+        Parameters object with the result of the fit.
+    d_params : Parameters
+        Parameters object with the previous parameters.
+    dd_params : Parameters
+        Parameters object with the parameters before the previous ones.
+    l_params_converged : List[bool]
+        List of bools, indicating which of the parameters are converged.
+    tol_epsilon : float
+        Tolerance for the epsilon parameter in a.u.
+    tol_sigma : float
+        Tolerance for the sigma parameter in a.u.
+
+    Returns
+    -------
+    bool
+        True if the entire fit has converged, False otherwise.
+    """
+
+    # if we have reached final conversion and no parameter is varied, return True
+    if d_params == fit_params:
+        return True
+    else:
+        for k, key in enumerate(fit_params):
+            # scan only relevant parameters
+            if k < len(l_params_converged):
+                if key.startswith("epsilon_"):
+                    if (
+                        abs(fit_params[key].value - dd_params[key].value)
+                        < tol_epsilon / EH2KCAL
+                    ):
+                        fit_params[key].vary = False
+                        l_params_converged[k] = True
+                elif key.startswith("sigma_"):
+                    if (
+                        abs(fit_params[key].value - dd_params[key].value)
+                        < tol_sigma * ANGSTROM2BOHR
+                    ):
+                        fit_params[key].vary = False
+                        l_params_converged[k] = True
+
+            # if no parameter is varied, check if all parameters are converged
+            # if yes, return True
+            # if no, continue with the next iteration, return False
+            if all([not fit_params[key].vary for key in fit_params]):
+                if all(l_params_converged):
+                    return True
+                else:
+                    # find the first parameter that is not converged and set it to vary
+                    for j, conv in enumerate(l_params_converged):
+                        if not conv:
+                            fit_params[list(fit_params.keys())[j]].vary = True
+                            return False
+    return False
+
+
+def fit_lj_params(
+    monomer_a: str, monomer_b: str, orientation: List[str], print_level: int
+) -> None:
     """Fit Lennard-Jones parameters to a system of monomers, using the given orientations.
 
     Parameters
@@ -478,10 +539,15 @@ def fit_lj_params(monomer_a: str, monomer_b: str, orientation: List[str]) -> Non
         The short name of the second monomer, used in the file names.
     orientation : List[str]
         The orientation of the monomers to be considered, used in the file names.
+    print_level : int
+        The level of verbosity for the output.
     """
 
     # info
-    print("Fitting Lennard-Jones parameters.\n")
+    custom_print("The following systems will be fitted:", 2, print_level)
+    for i in range(len(orientation)):
+        custom_print(f"{monomer_b}-{monomer_a}/{orientation[i]}", 2, print_level)
+    custom_print("", 2, print_level)
 
     # file list of geometries
     ll_all = [
@@ -499,64 +565,42 @@ def fit_lj_params(monomer_a: str, monomer_b: str, orientation: List[str]) -> Non
     ]
 
     for i in range(len(orientation)):
+
         # get list of files corresponding to the current orientation
         geolist = ll_all[i]
-
         # read energy file
         df_energy = pd.read_csv(ff_all[i], sep=";")
-
         # drop the all rows with e_lj > 5
         # remove as many rows from the beginning of geolist as there were rows dropped from the dataframe
         df_energy = df_energy[df_energy["e_pair"] < 5]
         while len(geolist) > len(df_energy):
             geolist.pop(0)
-
         # reshift index to begin at 0
         df_energy.reset_index(drop=True, inplace=True)
 
         # generate starting parameters for the fit
-        start_params = get_start_params(geolist)  # type: ignore
-        # sort the DataFrame by epsilon in increasing order
-        start_params.sort_values(by="epsilon", inplace=True)
-        n_params = len(start_params)
-        atom_pairs = start_params["atom_pair"].to_list()
+        fit_params, atom_pairs = get_start_params(geolist)  # type: ignore
 
-        # instantiate the Parameters object
-        fit_params = Parameters()
+        # initialize previous values of parameters
+        d_params = fit_params
 
-        for j in range(len(geolist)):
-            for k, row in start_params.iterrows():
-                vary_param = True if k == 0 else False
-                fit_params.add(
-                    f"epsilon_{row['atom_pair']}_{j}",
-                    value=row["epsilon"],
-                    min=0.9 * row["epsilon"],
-                    max=1.1 * row["epsilon"],
-                    vary=vary_param,
-                )
-                fit_params.add(
-                    f"sigma_{row['atom_pair']}_{j}",
-                    value=row["sigma"],
-                    min=0.9 * row["sigma"],
-                    max=1.1 * row["sigma"],
-                    vary=vary_param,
-                )
-                # make sure that the LJ params are consistent amont the different fit sets
-                if j > 0:
-                    fit_params[f"epsilon_{row['atom_pair']}_{j}"].expr = (
-                        f"epsilon_{row['atom_pair']}_0"
-                    )
-                    fit_params[f"sigma_{row['atom_pair']}_{j}"].expr = (
-                        f"sigma_{row['atom_pair']}_0"
-                    )
+        # generate a list with bools, indicating if the parameters are converged
+        # the list has length of the number of parameters and follows the enumeration of the fit_params object
+        # initially, all parameters are not converged
+        l_params_converged = [False for _ in range(len(fit_params) // len(geolist))]
 
         # info
-        print(f"Starting the fit for {monomer_b}-{monomer_a}/{orientation[i]}.\n")
-
-        print_lj_params(params_to_df(fit_params), 0)
+        custom_print(
+            f"Starting the fit for {monomer_b}-{monomer_a}/{orientation[i]}.\n",
+            1,
+            print_level,
+        )
+        custom_print(print_lj_params(params_to_df(fit_params), 0), 2, print_level)
 
         # fitting loop
-        for c in range(1, 51):
+        converged = False
+        c = 0
+        while not converged:
 
             # perform fit
             fit_out = minimize(
@@ -565,19 +609,46 @@ def fit_lj_params(monomer_a: str, monomer_b: str, orientation: List[str]) -> Non
                 args=(geolist, df_energy),
                 method="least_squares",
             )
+            c += 1
 
-            print_lj_params(params_to_df(fit_out.params), c)  # type: ignore
+            # info
+            custom_print(print_lj_params(params_to_df(fit_out.params), c), 2, print_level)  # type: ignore
 
-            # generate the new parameters
-            fit_params = update_params(fit_out.params, n_params, atom_pairs, c)  # type: ignore
+            # generate the new parameters and save the old ones
+            dd_params = d_params
+            d_params = fit_params
+            fit_params = update_params(fit_out.params, atom_pairs, c)  # type: ignore
 
-            if c % 5 == 0:
-                plot_fit(
-                    fit_out.params,  # type: ignore
-                    geolist,
-                    df_energy,
-                    monomer_a,
-                    monomer_b,
-                    orientation[i],
-                    c,
+            # check for parameter convergence
+            if c > 2:
+                converged = check_param_convergence(
+                    fit_params, d_params, dd_params, l_params_converged
                 )
+
+            # info
+            if print_level > 0:
+                if (print_level == 2 and c % 5 == 0) or print_level == 3:
+                    write_params_to_csv(params_to_df(fit_params), orientation[i], c)
+                    plot_fit(
+                        fit_out.params,  # type: ignore
+                        geolist,
+                        df_energy,
+                        monomer_a,
+                        monomer_b,
+                        orientation[i],
+                        c,
+                    )
+
+        # info
+        custom_print("*** Fit converged ***\n", 1, print_level)
+        custom_print(print_lj_params(params_to_df(fit_params), -1), 0, print_level)
+        write_params_to_csv(params_to_df(fit_params), orientation[i], -1)
+        plot_fit(
+            fit_out.params,  # type: ignore
+            geolist,
+            df_energy,
+            monomer_a,
+            monomer_b,
+            orientation[i],
+            -1,
+        )

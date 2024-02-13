@@ -10,14 +10,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
-
 from .. import __version__
-
+from ..helpers import custom_print
 from .fit import fit_lj_params
 
 
 def get_system_lj_params(
     system: str,
+    print_level: int,
 ) -> None:
     """Get the interaction energy between two monomers, and derive further energies.
 
@@ -25,7 +25,19 @@ def get_system_lj_params(
     ----------
     system : str
         The name of the system to be considered.
+    print_level : int
+        The level of verbosity for the output.
     """
+
+    # info
+    custom_print(
+        [
+            "Fitting LJ parameters",
+            "---------------------",
+        ],
+        0,
+        print_level,
+    )
 
     # define the systems
     calc_cc_bf4 = system in ["all", "cc-bf4", "bf4", "cc"]
@@ -38,6 +50,7 @@ def get_system_lj_params(
             monomer_a="bf4",
             monomer_b="cc",
             orientation=["c-face"],  # , "c-tip", "c-edge1"]
+            print_level=print_level,
         )
     # if calc_cc_c1c1im:
     #     fit_lj_params(
