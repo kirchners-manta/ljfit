@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import List, Tuple
 
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 from lmfit import Parameters, minimize
 from scipy.spatial import distance_matrix
@@ -19,10 +20,10 @@ from scipy.spatial import distance_matrix
 from .. import __version__
 from ..energy import get_xyz_from_sapt
 from ..helpers import (
+    custom_print,
     get_file_list,
     params_to_df,
     print_lj_params,
-    custom_print,
     write_params_to_csv,
 )
 
@@ -145,7 +146,7 @@ def get_residuals(
     return residuals
 
 
-def get_start_params(filelist: List[str | Path]) -> Tuple[Parameters, List[str]]:
+def get_start_params(filelist: List[Path]) -> Tuple[Parameters, List[str]]:
     """Generate a DataFrame with initial Lennard-Jones parameters for a fit.
 
     Parameters
@@ -243,6 +244,7 @@ def get_start_params(filelist: List[str | Path]) -> Tuple[Parameters, List[str]]
                 f"sigma_{atom_pairs[j]}_{i}",
                 value=sigma_start[f"{pair[0]}-{pair[1]}"] * ANGSTROM2BOHR,
                 max=1.1 * sigma_start[f"{pair[0]}-{pair[1]}"] * ANGSTROM2BOHR,
+                min=0.9 * sigma_start[f"{pair[0]}-{pair[1]}"] * ANGSTROM2BOHR,
                 vary=(j == 0),
             )
             # make sure that the LJ params are consistent amont the different fit sets
@@ -270,10 +272,8 @@ def plot_fit(
     params: Parameters,
     filelist: List[Path],
     data: pd.DataFrame,
-    monomer_a: str,
-    monomer_b: str,
-    orientation: str,
     i: int,
+    outdir: str | Path,
 ) -> None:
     """Generate a plot of the current fit.
 
@@ -285,56 +285,61 @@ def plot_fit(
         List of files from which the LJ energy should be fitteed
     data : pd.DataFrame
         Data to be fitted
-    monomer_a : str
-        Name of the first monomer, for file naming
-    monomer_b : str
-        Name of the second monomer, for file naming
-    orientation : str
-        Name of the orientation, for file naming
     i : int
         Iteration number
+    outdir : str | Path
+        Output directory
     """
 
     # create a figure
-    fig = plt.figure(figsize=(6, 5))
+    fig = plt.figure(figsize=(4, 3))
     gs = fig.add_gridspec(1, 1)
     ax = fig.add_subplot(gs[0, 0])
 
-    ax.plot(data["distance"], data["e_pair"], "o", ls="-", label="data", color="k")
+    ax.plot(data["distance"], data["e_pair"], "o", ls="", label="data", color="k")
 
+    l_lj = []
     for j in range(len(filelist)):
-        ax.plot(
-            data["distance"][j],
-            lj_dataset(params, j, filelist[j]),
-            marker="x",
-            ls="",
-            color="r",
-        )
+        l_lj.append(lj_dataset(params, j, filelist[j]))
+
+    df_fit = data[["distance", "e_pair"]].copy()
+    df_fit["e_lj"] = l_lj
+
+    ax.plot(
+        df_fit["distance"],
+        df_fit["e_lj"],
+        marker="x",
+        ls="-",
+        color="r",
+    )
 
     ax.set_xlabel(r"$d$ / $\mathrm{\AA}$")
     ax.set_ylabel(r"$E_\mathrm{LJ}$ / $\mathrm{m}E_\mathrm{h}$")
 
     # generate directory if it does not exist
-    Path("./ljfit/img/").mkdir(parents=True, exist_ok=True)
-    # remove the old plot files if they exist
-    for file in Path("./ljfit/img/").glob(
-        f"{monomer_b}-{monomer_a}-{orientation}_fit_{i}.pdf"
-    ):
-        file.unlink()
+    Path(outdir).mkdir(parents=True, exist_ok=True)
+    # specify output path
+    if i == -1:
+        outpath = Path(outdir) / f"lj_fit_final.pdf"
+    else:
+        outpath = Path(outdir) / f"lj_fit_{i:02d}.pdf"
+    # remove file if it exists already
+    if outpath.exists():
+        outpath.unlink()
 
     fig.savefig(
-        "./ljfit/img/"
-        + monomer_b
-        + "-"
-        + monomer_a
-        + "-"
-        + orientation
-        + f"_fit_{i}.pdf",
+        outpath,
         bbox_inches="tight",
         format="pdf",
     )
     # close figure after saving
     plt.close(fig)
+
+    # write the fit to csv
+    # remove .pdf and add .csv
+    df_fit.to_csv(outpath.with_suffix(".csv"), index=False, float_format="%.6f")
+    # info
+    print(f"\nPlot written to {outpath}")
 
 
 def scaling(kind: str, param: str, i: int) -> float:
@@ -383,7 +388,9 @@ def scaling(kind: str, param: str, i: int) -> float:
     return 0.0
 
 
-def update_params(fit_result: Parameters, atom_pairs: List[str], i: int) -> Parameters:
+def update_params(
+    fit_result: Parameters, atom_pairs: List[str], a_params_varied: np.ndarray, i: int
+) -> Tuple[Parameters, np.ndarray]:
     """Update the parameters of the fit.
 
     Parameters
@@ -393,13 +400,16 @@ def update_params(fit_result: Parameters, atom_pairs: List[str], i: int) -> Para
         Used to update generate parameters.
     atom_pairs:
         List of atom pairs.
+    a_params_varied : np.ndarray
+        Array of bools, indicating if the parameters were varied in the last len(atom_pairs) iterations.
+        Has shape (len(atom_pairs), 2*len(atom_pairs)).
     i : int
         Iteration number.
 
     Returns
     -------
-    Parameters
-        Updated parameters, used for the next iteration.
+    Parameters, np.ndarray
+        Updated parameters, used for the next iteration and the array of bools.
     """
     # number of independent parameters
     n_params = len(atom_pairs)
@@ -407,10 +417,20 @@ def update_params(fit_result: Parameters, atom_pairs: List[str], i: int) -> Para
     n_sets = len(fit_result) // (n_params * 2)
     # instantiate the new Parameters object
     new_params = Parameters()
+    # update the array of bools
+    # insert a new row at the beginning of the array with False
+    # shift all other rows down
+    a_params_varied = np.insert(a_params_varied, 0, False, axis=0)
+    # the last row is removed, the shape of the array is maintained
+    a_params_varied = np.delete(a_params_varied, -1, axis=0)
 
     # generate the new parameters
     for j in range(n_sets):
         for k in range(n_params):
+            if j == 0:
+                # update the array
+                a_params_varied[0, 2 * k] = k == i or i % n_params == k
+                a_params_varied[0, 2 * k + 1] = k == i or i % n_params == k
             if k == 0:
                 # first epsilon is set, the other epsilons are dependent on the first one
                 new_params.add(
@@ -420,7 +440,7 @@ def update_params(fit_result: Parameters, atom_pairs: List[str], i: int) -> Para
                     * scaling("min", "epsilon", i),
                     max=fit_result[f"epsilon_{atom_pairs[k]}_{j}"].value
                     * scaling("max", "epsilon", i),
-                    vary=(k == i or i % n_params == k),
+                    vary=a_params_varied[0, 2 * k],
                 )
             else:
                 # all other epsilons are dependent on the first one,
@@ -432,17 +452,27 @@ def update_params(fit_result: Parameters, atom_pairs: List[str], i: int) -> Para
                     min=fit_result[f"epsilon_{atom_pairs[k-1]}_{j}"].value,
                     max=fit_result[f"epsilon_{atom_pairs[k]}_{j}"].value
                     * scaling("max", "epsilon", i),
-                    vary=(k == i or i % n_params == k),
+                    vary=a_params_varied[0, 2 * k],
                 )
 
             new_params.add(
                 f"sigma_{atom_pairs[k]}_{j}",
                 value=fit_result[f"sigma_{atom_pairs[k]}_{j}"].value,
-                min=fit_result[f"sigma_{atom_pairs[k]}_{j}"].value
-                * scaling("min", "sigma", i),
-                max=fit_result[f"sigma_{atom_pairs[k]}_{j}"].value
-                * scaling("max", "sigma", i),
-                vary=(k == i or i % n_params == k),
+                min=(
+                    2.0 * ANGSTROM2BOHR
+                    if fit_result[f"sigma_{atom_pairs[k]}_{j}"].value / ANGSTROM2BOHR
+                    < 2.2
+                    else fit_result[f"sigma_{atom_pairs[k]}_{j}"].value
+                    * scaling("min", "sigma", i)
+                ),
+                max=(
+                    4.0 * ANGSTROM2BOHR
+                    if fit_result[f"sigma_{atom_pairs[k]}_{j}"].value / ANGSTROM2BOHR
+                    > 3.6
+                    else fit_result[f"sigma_{atom_pairs[k]}_{j}"].value
+                    * scaling("max", "sigma", i)
+                ),
+                vary=a_params_varied[0, 2 * k + 1],
             )
             # make sure that the LJ params are consistent amont the different fit sets
             if j > 0:
@@ -452,30 +482,28 @@ def update_params(fit_result: Parameters, atom_pairs: List[str], i: int) -> Para
                 new_params[f"sigma_{atom_pairs[k]}_{j}"].expr = (
                     f"sigma_{atom_pairs[k]}_0"
                 )
-        # eps(CG_B) must be > eps(CG_FB)
-        new_params[f"epsilon_CG_B_{j}"].max = new_params[f"epsilon_CG_FB_{j}"].value
 
-    return new_params
+    return new_params, a_params_varied
 
 
 def check_param_convergence(
     fit_params: Parameters,
-    d_params: Parameters,
-    dd_params: Parameters,
+    l_old_params: List[Parameters],
+    a_params_varied: np.ndarray,
     l_params_converged: List[bool],
-    tol_epsilon: float = 5e-4,
-    tol_sigma: float = 5e-3,
-) -> bool:
+    tol_epsilon: float = 5e-3,
+    tol_sigma: float = 5e-2,
+) -> Tuple[bool, np.ndarray]:
     """Check if the parameters have converged.
 
     Parameters
     ----------
     fit_params : Parameters
         Parameters object with the result of the fit.
-    d_params : Parameters
-        Parameters object with the previous parameters.
-    dd_params : Parameters
-        Parameters object with the parameters before the previous ones.
+    l_old_params : List[Parameters]
+        List of Parameters objects with the parameters of the previous len(atom_pairs) iterations.
+    a_params_varied : np.ndarray
+        Array of bools, indicating if the parameters were varied in the last len(atom_pairs) iterations.
     l_params_converged : List[bool]
         List of bools, indicating which of the parameters are converged.
     tol_epsilon : float
@@ -485,45 +513,56 @@ def check_param_convergence(
 
     Returns
     -------
-    bool
-        True if the entire fit has converged, False otherwise.
+    bool, np.ndarray
+        True if the entire fit has converged, False otherwise, and the updated array of bools.
     """
 
     # if we have reached final conversion and no parameter is varied, return True
-    if d_params == fit_params:
-        return True
-    else:
-        for k, key in enumerate(fit_params):
-            # scan only relevant parameters
-            if k < len(l_params_converged):
-                if key.startswith("epsilon_"):
-                    if (
-                        abs(fit_params[key].value - dd_params[key].value)
-                        < tol_epsilon / EH2KCAL
-                    ):
-                        fit_params[key].vary = False
-                        l_params_converged[k] = True
-                elif key.startswith("sigma_"):
-                    if (
-                        abs(fit_params[key].value - dd_params[key].value)
-                        < tol_sigma * ANGSTROM2BOHR
-                    ):
-                        fit_params[key].vary = False
-                        l_params_converged[k] = True
-
-            # if no parameter is varied, check if all parameters are converged
-            # if yes, return True
-            # if no, continue with the next iteration, return False
-            if all([not fit_params[key].vary for key in fit_params]):
-                if all(l_params_converged):
-                    return True
+    for k, key in enumerate(fit_params):
+        # scan only relevant parameters
+        if k < len(l_params_converged):
+            # find the last time the parameter was varied
+            # return this index to check the corresponding old parameters in the l_old_params list when comparing for convergence
+            for j, entry in enumerate(a_params_varied[1:, k]):
+                if entry:
+                    idx = j
+                    break
                 else:
-                    # find the first parameter that is not converged and set it to vary
-                    for j, conv in enumerate(l_params_converged):
-                        if not conv:
-                            fit_params[list(fit_params.keys())[j]].vary = True
-                            return False
-    return False
+                    idx = -1
+            # check epsilon and sigma parameters for convergence
+            if key.startswith("epsilon_"):
+                # check deviation from last update
+                if (
+                    abs(fit_params[key].value - l_old_params[idx][key].value)
+                    < tol_epsilon / EH2KCAL
+                ):
+                    # if converged, set the parameter to not vary
+                    # mark the parameter as converged
+                    fit_params[key].vary = False
+                    a_params_varied[0, k] = False
+                    l_params_converged[k] = True
+            elif key.startswith("sigma_"):
+                if (
+                    abs(fit_params[key].value - l_old_params[idx][key].value)
+                    < tol_sigma * ANGSTROM2BOHR
+                ):
+                    fit_params[key].vary = False
+                    a_params_varied[0, k] = False
+                    l_params_converged[k] = True
+        # if no parameter is varied, check if all parameters are converged
+        # if yes, return True
+        # if no, continue with the next iteration, return False
+        if all([not fit_params[key].vary for key in fit_params]):
+            if all(l_params_converged):
+                return True, a_params_varied
+            else:
+                # find the first parameter that is not converged and set it to vary
+                for j, conv in enumerate(l_params_converged):
+                    if not conv:
+                        fit_params[list(fit_params.keys())[j]].vary = True
+                        a_params_varied[0, j] = True
+                        return False, a_params_varied
+    return False, a_params_varied
 
 
 def fit_lj_params(
@@ -579,15 +618,12 @@ def fit_lj_params(
         df_energy.reset_index(drop=True, inplace=True)
 
         # generate starting parameters for the fit
-        fit_params, atom_pairs = get_start_params(geolist)  # type: ignore
-
-        # initialize previous values of parameters
-        d_params = fit_params
+        fit_params, atom_pairs = get_start_params(geolist)
 
         # generate a list with bools, indicating if the parameters are converged
         # the list has length of the number of parameters and follows the enumeration of the fit_params object
         # initially, all parameters are not converged
-        l_params_converged = [False for _ in range(len(fit_params) // len(geolist))]
+        l_params_converged = [False for _ in range(len(atom_pairs) * 2)]
 
         # info
         custom_print(
@@ -599,8 +635,19 @@ def fit_lj_params(
 
         # fitting loop
         converged = False
+        reach_max_iter = False
         c = 0
-        while not converged:
+        # the last len(atom_pairs) parameter sets are saved in a list
+        l_old_params = [fit_params for _ in range(len(atom_pairs))]
+        # we need an array of bools to check if each parameters was varied in the last len(atom_pairs) iterations
+        # the array has shape (len(atom_pairs)+1, 2*len(atom_pairs)) and is initially False
+        a_params_varied = np.zeros(
+            (len(atom_pairs) + 1, 2 * len(atom_pairs)), dtype=bool
+        )
+        a_params_varied[0, :2] = True
+
+        while not converged and not reach_max_iter:
+            c += 1
 
             # perform fit
             fit_out = minimize(
@@ -609,46 +656,61 @@ def fit_lj_params(
                 args=(geolist, df_energy),
                 method="least_squares",
             )
-            c += 1
 
             # info
             custom_print(print_lj_params(params_to_df(fit_out.params), c), 2, print_level)  # type: ignore
 
             # generate the new parameters and save the old ones
-            dd_params = d_params
-            d_params = fit_params
-            fit_params = update_params(fit_out.params, atom_pairs, c)  # type: ignore
+            # add the current params as first element of the list
+            # shift all other elements to the right
+            # maintain the length of the list (len(atom_pairs))
+            l_old_params.insert(0, fit_params)
+            l_old_params.pop(-1)
+
+            fit_params, a_params_varied = update_params(fit_out.params, atom_pairs, a_params_varied, c)  # type: ignore
 
             # check for parameter convergence
-            if c > 2:
-                converged = check_param_convergence(
-                    fit_params, d_params, dd_params, l_params_converged
+            if c > len(atom_pairs):
+                converged, a_params_varied = check_param_convergence(
+                    fit_params, l_old_params, a_params_varied, l_params_converged
                 )
 
             # info
             if print_level > 0:
                 if (print_level == 2 and c % 5 == 0) or print_level == 3:
-                    write_params_to_csv(params_to_df(fit_params), orientation[i], c)
+                    write_params_to_csv(
+                        params_to_df(fit_params),
+                        c,
+                        outdir=f"{monomer_b}-{monomer_a}/{orientation[i]}/ljfit_out",
+                    )
                     plot_fit(
                         fit_out.params,  # type: ignore
                         geolist,
                         df_energy,
-                        monomer_a,
-                        monomer_b,
-                        orientation[i],
                         c,
+                        outdir=f"{monomer_b}-{monomer_a}/{orientation[i]}/ljfit_out",
                     )
 
+            # maximum number of iterations
+            if c > 100:
+                custom_print(
+                    f"*** Fit did not converge in {c} iterations ***\n", 0, print_level
+                )
+                reach_max_iter = True
+
         # info
-        custom_print("*** Fit converged ***\n", 1, print_level)
+        if converged:
+            custom_print(f"\n*** Fit converged in {c} iterations ***", 1, print_level)
         custom_print(print_lj_params(params_to_df(fit_params), -1), 0, print_level)
-        write_params_to_csv(params_to_df(fit_params), orientation[i], -1)
+        write_params_to_csv(
+            params_to_df(fit_params),
+            -1,
+            outdir=f"{monomer_b}-{monomer_a}/{orientation[i]}/ljfit_out",
+        )
         plot_fit(
             fit_out.params,  # type: ignore
             geolist,
             df_energy,
-            monomer_a,
-            monomer_b,
-            orientation[i],
             -1,
+            outdir=f"{monomer_b}-{monomer_a}/{orientation[i]}/ljfit_out",
         )

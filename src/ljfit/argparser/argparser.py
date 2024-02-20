@@ -231,6 +231,13 @@ def parser(name: str = "ljfit", **kwargs) -> argparse.ArgumentParser:  # type: i
         help="Fit LJ parameters.",
         default=False,
     )
+    # p.add_argument(
+    #     "-o",
+    #     "--output",
+    #     type=str,
+    #     default="./ljfit/",
+    #     help="Output directory.",
+    # )
     p.add_argument(
         "-p",
         "--print",

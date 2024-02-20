@@ -49,22 +49,27 @@ def get_system_lj_params(
         fit_lj_params(
             monomer_a="bf4",
             monomer_b="cc",
-            orientation=["c-face"],  # , "c-tip", "c-edge1"]
+            orientation=["c-face", "c-tip", "c-edge1"],
             print_level=print_level,
         )
-    # if calc_cc_c1c1im:
-    #     fit_lj_params(
-    #         monomer_a="c1c1im",
-    #         monomer_b="cc",
-    #         orientation=["c-cor", "c-h21", "c-h22"],
-    #     )
-    # if calc_dc_bf4:
-    #     fit_lj_params(
-    #         monomer_a="bf4", monomer_b="dc", orientation=["c-face", "c-tip", "c-edge1"]
-    #     )
-    # if calc_dc_c1c1im:
-    #     fit_lj_params(
-    #         monomer_a="c1c1im",
-    #         monomer_b="dc",
-    #         orientation=["c-cor", "c-h21", "c-h22"],
-    #     )
+    if calc_cc_c1c1im:
+        fit_lj_params(
+            monomer_a="c1c1im",
+            monomer_b="cc",
+            orientation=["c-cor", "c-h21", "c-h22"],
+            print_level=print_level,
+        )
+    if calc_dc_bf4:
+        fit_lj_params(
+            monomer_a="bf4",
+            monomer_b="dc",
+            orientation=["c-face", "c-tip", "c-edge1"],
+            print_level=print_level,
+        )
+    if calc_dc_c1c1im:
+        fit_lj_params(
+            monomer_a="c1c1im",
+            monomer_b="dc",
+            orientation=["c-cor", "c-h21", "c-h22"],
+            print_level=print_level,
+        )

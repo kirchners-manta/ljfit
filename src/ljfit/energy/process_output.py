@@ -206,17 +206,19 @@ def get_xyz_from_sapt(file: str | Path) -> Tuple[pd.DataFrame, pd.DataFrame]:
             df_mon_a["atom"] = ["B", "FB", "FB", "FB", "FB"]
         # C1c1im
         if df_mon_a["atom"][0] == "C":
-            # order is: CW, CW, NA, CR, C1, NA, HCW, HCW, HCR, C1, 6x HC
+            # order is (from CL&P): CW, CW, NA, CR, C1, NA, HCW, HCW, HCR, C1, 6x HC
+            # simplify to: CW, CW, NA, CW, C1, NA, HC, HC, HC, C1, 6x HC
+            # thereby, reduce the number of atom types from 6 to 4
             df_mon_a["atom"] = [
                 "CW",
                 "CW",
                 "NA",
-                "CR",
+                "CW",
                 "C1",
                 "NA",
-                "HCW",
-                "HCW",
-                "HCR",
+                "HC",
+                "HC",
+                "HC",
                 "C1",
                 "HC",
                 "HC",

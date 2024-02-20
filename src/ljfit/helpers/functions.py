@@ -135,16 +135,16 @@ def print_lj_params(df: pd.DataFrame, i: int) -> List[str]:
 
     if i == -1:
         return [
-            "Final LJ parameters",
+            "\nFinal LJ parameters",
             "-------------------",
-            "kcal/mol / Angstrom",
-            dc.to_string(index=False, float_format="{:.4f}".format),
+            "kcal/mol / Angstrom\n",
+            dc.to_string(index=False, float_format="{:.5f}".format),
         ]
     else:
         return [
-            f"Iteration {i}",
+            f"\nIteration {i}",
             "------------",
-            dc.to_string(index=False),
+            dc.to_string(index=False, float_format="{:.5f}".format),
         ]
 
 
@@ -195,17 +195,13 @@ def custom_print(string: str | List[str], level: int, print_level: int) -> None:
             print(string)
 
 
-def write_params_to_csv(
-    df: pd.DataFrame, orientation: str, i: int, outdir: str | Path = "./ljfit/data"
-) -> None:
+def write_params_to_csv(df: pd.DataFrame, i: int, outdir: str | Path) -> None:
     """Writes the parameters to a csv file
 
     Parameters
     ----------
     df : pd.DataFrame
         DataFrame containing the lj parameters in a.u., with columns ['atom_pair', 'epsilon', 'sigma']
-    orientation : str
-        Orientation of the monomers
     i : int
         Iteration number
     outdir : str | Path
@@ -220,9 +216,12 @@ def write_params_to_csv(
     Path(outdir).mkdir(parents=True, exist_ok=True)
     # specify output path
     if i == -1:
-        outpath = Path(outdir) / f"lj_params_{orientation}_final.csv"
+        outpath = Path(outdir) / f"lj_params_final.csv"
     else:
-        outpath = Path(outdir) / f"lj_params_{orientation}_{i}.csv"
+        outpath = Path(outdir) / f"lj_params_{i:02d}.csv"
+    # remove file if it exists already
+    if outpath.exists():
+        outpath.unlink()
     # write DataFrame to csv
-    dc.to_csv(outpath, index=False)
-    print(f"Parameters written to {outpath}")
+    dc.to_csv(outpath, index=False, float_format="%.5f")
+    print(f"\nParameters written to {outpath}")
