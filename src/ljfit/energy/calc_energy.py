@@ -102,6 +102,8 @@ def extract_energy(
             e_pol_rahul = get_e_pol(a, b, charges_a, alpha=1.8, damping=0.5) * 1000
             # pairwise additive remainder
             e_pair = e_tot - e_chelpg_hf - e_pol
+            # multipole-corrected interaction energy
+            e_int = e_tot - e_chelpg_hf
 
             # append the energies to the list
             l_energy.append(
@@ -116,6 +118,7 @@ def extract_energy(
                     e_pol,
                     e_pol_rahul,
                     e_pair,
+                    e_int,
                 ]
             )
 
@@ -143,6 +146,7 @@ def extract_energy(
                 "e_pol",
                 "e_pol_rahul",
                 "e_pair",
+                "e_int",
             ],
         )
         # reorder the df by increasing distance

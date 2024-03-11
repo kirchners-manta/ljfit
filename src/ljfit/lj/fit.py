@@ -139,14 +139,17 @@ def get_residuals(
     # iterate over all datasets
     for i in range(ndata):
         # read LJ energy from file
-        e_pair = data["e_pair"][i]
+        # the energy is the second column in the file
+        energy = data.iloc[i, 1]
 
-        residuals.append(lj_dataset(params, i, filelist[i]) - e_pair)
+        residuals.append(lj_dataset(params, i, filelist[i]) - energy)
 
     return residuals
 
 
-def get_start_params(filelist: List[Path]) -> Tuple[Parameters, List[str]]:
+def get_start_params(
+    filelist: List[Path], fit_nonpol: bool
+) -> Tuple[Parameters, List[str]]:
     """Generate a DataFrame with initial Lennard-Jones parameters for a fit.
 
     Parameters
@@ -154,6 +157,8 @@ def get_start_params(filelist: List[Path]) -> Tuple[Parameters, List[str]]:
     filelist : List[str  |  Path]
         List of file paths to the SAPT input/ output files with the geometries.
         Only the first file is used to generate the parameters.
+    fit_nonpol : bool
+        Whether to fit the LJ parameters for a non-polarisable force field.
 
     Returns
     -------
@@ -274,6 +279,7 @@ def plot_fit(
     data: pd.DataFrame,
     i: int,
     outdir: str | Path,
+    fit_nonpol: bool,
 ) -> None:
     """Generate a plot of the current fit.
 
@@ -289,6 +295,8 @@ def plot_fit(
         Iteration number
     outdir : str | Path
         Output directory
+    fit_nonpol : bool
+        Whether to fit the LJ parameters for a non-polarisable force field.
     """
 
     # create a figure
@@ -296,13 +304,13 @@ def plot_fit(
     gs = fig.add_gridspec(1, 1)
     ax = fig.add_subplot(gs[0, 0])
 
-    ax.plot(data["distance"], data["e_pair"], "o", ls="", label="data", color="k")
+    ax.plot(data["distance"], data.iloc[:, 1], "o", ls="", label="data", color="k")
 
     l_lj = []
     for j in range(len(filelist)):
         l_lj.append(lj_dataset(params, j, filelist[j]))
 
-    df_fit = data[["distance", "e_pair"]].copy()
+    df_fit = data.copy()
     df_fit["e_lj"] = l_lj
 
     ax.plot(
@@ -318,11 +326,16 @@ def plot_fit(
 
     # generate directory if it does not exist
     Path(outdir).mkdir(parents=True, exist_ok=True)
+    # non-polarisable force field
+    if fit_nonpol:
+        fstr = "nonpol_"
+    else:
+        fstr = ""
     # specify output path
     if i == -1:
-        outpath = Path(outdir) / f"lj_fit_final.pdf"
+        outpath = Path(outdir) / f"lj_fit_{fstr}final.pdf"
     else:
-        outpath = Path(outdir) / f"lj_fit_{i:02d}.pdf"
+        outpath = Path(outdir) / f"lj_fit_{fstr}{i:02d}.pdf"
     # remove file if it exists already
     if outpath.exists():
         outpath.unlink()
@@ -474,6 +487,12 @@ def update_params(
                 ),
                 vary=a_params_varied[0, 2 * k + 1],
             )
+            # debug
+            # print value, min, max for every epsilon_0
+            # if j == 0:
+            #     print(
+            #         f"{EH2KCAL * fit_result[f'epsilon_{atom_pairs[k]}_{j}'].value:.5f} {EH2KCAL * fit_result[f'epsilon_{atom_pairs[k]}_{j}'].min:.5f} {EH2KCAL * fit_result[f'epsilon_{atom_pairs[k]}_{j}'].max:.5f}"
+            #     )
             # make sure that the LJ params are consistent amont the different fit sets
             if j > 0:
                 new_params[f"epsilon_{atom_pairs[k]}_{j}"].expr = (
@@ -566,7 +585,11 @@ def check_param_convergence(
 
 
 def fit_lj_params(
-    monomer_a: str, monomer_b: str, orientation: List[str], print_level: int
+    monomer_a: str,
+    monomer_b: str,
+    orientation: List[str],
+    print_level: int,
+    fit_nonpol: bool,
 ) -> None:
     """Fit Lennard-Jones parameters to a system of monomers, using the given orientations.
 
@@ -580,6 +603,8 @@ def fit_lj_params(
         The orientation of the monomers to be considered, used in the file names.
     print_level : int
         The level of verbosity for the output.
+    fit_nonpol : bool
+        Whether to fit the LJ parameters for a non-polarisable force field.
     """
 
     # info
@@ -609,16 +634,23 @@ def fit_lj_params(
         geolist = ll_all[i]
         # read energy file
         df_energy = pd.read_csv(ff_all[i], sep=";")
-        # drop the all rows with e_lj > 5
+        # drop the all rows with energy > 5
         # remove as many rows from the beginning of geolist as there were rows dropped from the dataframe
-        df_energy = df_energy[df_energy["e_pair"] < 5]
+        if fit_nonpol:
+            energy_type = "e_int"
+        else:
+            energy_type = "e_pair"
+        df_energy = df_energy[df_energy[f"{energy_type}"] < 5]
+        # drop all columns except the distance and the energy
+        df_energy = df_energy[["distance", f"{energy_type}"]]
+
         while len(geolist) > len(df_energy):
             geolist.pop(0)
         # reshift index to begin at 0
         df_energy.reset_index(drop=True, inplace=True)
 
         # generate starting parameters for the fit
-        fit_params, atom_pairs = get_start_params(geolist)
+        fit_params, atom_pairs = get_start_params(geolist, fit_nonpol)
 
         # generate a list with bools, indicating if the parameters are converged
         # the list has length of the number of parameters and follows the enumeration of the fit_params object
@@ -682,6 +714,7 @@ def fit_lj_params(
                         params_to_df(fit_params),
                         c,
                         outdir=f"{monomer_b}-{monomer_a}/{orientation[i]}/ljfit_out",
+                        fit_nonpol=fit_nonpol,
                     )
                     plot_fit(
                         fit_out.params,  # type: ignore
@@ -689,6 +722,7 @@ def fit_lj_params(
                         df_energy,
                         c,
                         outdir=f"{monomer_b}-{monomer_a}/{orientation[i]}/ljfit_out",
+                        fit_nonpol=fit_nonpol,
                     )
 
             # maximum number of iterations
@@ -706,6 +740,7 @@ def fit_lj_params(
             params_to_df(fit_params),
             -1,
             outdir=f"{monomer_b}-{monomer_a}/{orientation[i]}/ljfit_out",
+            fit_nonpol=fit_nonpol,
         )
         plot_fit(
             fit_out.params,  # type: ignore
@@ -713,4 +748,5 @@ def fit_lj_params(
             df_energy,
             -1,
             outdir=f"{monomer_b}-{monomer_a}/{orientation[i]}/ljfit_out",
+            fit_nonpol=fit_nonpol,
         )

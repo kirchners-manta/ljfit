@@ -18,6 +18,7 @@ from .fit import fit_lj_params
 def get_system_lj_params(
     system: str,
     print_level: int,
+    fit_nonpol: bool,
 ) -> None:
     """Get the interaction energy between two monomers, and derive further energies.
 
@@ -27,6 +28,8 @@ def get_system_lj_params(
         The name of the system to be considered.
     print_level : int
         The level of verbosity for the output.
+    fit_nonpol : bool
+        Whether to fit the LJ parameters for a non-polarisable force field.
     """
 
     # info
@@ -51,6 +54,7 @@ def get_system_lj_params(
             monomer_b="cc",
             orientation=["c-face", "c-tip", "c-edge1"],
             print_level=print_level,
+            fit_nonpol=fit_nonpol,
         )
     if calc_cc_c1c1im:
         fit_lj_params(
@@ -58,6 +62,7 @@ def get_system_lj_params(
             monomer_b="cc",
             orientation=["c-cor", "c-h21", "c-h22"],
             print_level=print_level,
+            fit_nonpol=fit_nonpol,
         )
     if calc_dc_bf4:
         fit_lj_params(
@@ -65,6 +70,7 @@ def get_system_lj_params(
             monomer_b="dc",
             orientation=["c-face", "c-tip", "c-edge1"],
             print_level=print_level,
+            fit_nonpol=fit_nonpol,
         )
     if calc_dc_c1c1im:
         fit_lj_params(
@@ -72,4 +78,5 @@ def get_system_lj_params(
             monomer_b="dc",
             orientation=["c-cor", "c-h21", "c-h22"],
             print_level=print_level,
+            fit_nonpol=fit_nonpol,
         )

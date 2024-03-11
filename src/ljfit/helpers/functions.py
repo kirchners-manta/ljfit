@@ -195,7 +195,9 @@ def custom_print(string: str | List[str], level: int, print_level: int) -> None:
             print(string)
 
 
-def write_params_to_csv(df: pd.DataFrame, i: int, outdir: str | Path) -> None:
+def write_params_to_csv(
+    df: pd.DataFrame, i: int, outdir: str | Path, fit_nonpol: bool
+) -> None:
     """Writes the parameters to a csv file
 
     Parameters
@@ -206,6 +208,8 @@ def write_params_to_csv(df: pd.DataFrame, i: int, outdir: str | Path) -> None:
         Iteration number
     outdir : str | Path
         Output directory
+    fit_nonpol : bool
+        Whether to fit the LJ parameters for a non-polarisable force field
     """
     # make a copy of the DataFrame
     dc = df.copy()
@@ -214,11 +218,16 @@ def write_params_to_csv(df: pd.DataFrame, i: int, outdir: str | Path) -> None:
 
     # generate directory if it does not exist
     Path(outdir).mkdir(parents=True, exist_ok=True)
+    # non-polarisable force field
+    if fit_nonpol:
+        fstr = "nonpol_"
+    else:
+        fstr = ""
     # specify output path
     if i == -1:
-        outpath = Path(outdir) / f"lj_params_final.csv"
+        outpath = Path(outdir) / f"lj_params_{fstr}final.csv"
     else:
-        outpath = Path(outdir) / f"lj_params_{i:02d}.csv"
+        outpath = Path(outdir) / f"lj_params_{fstr}{i:02d}.csv"
     # remove file if it exists already
     if outpath.exists():
         outpath.unlink()

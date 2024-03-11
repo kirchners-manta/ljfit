@@ -26,6 +26,6 @@ def console_entry_point(argv: Sequence[str] | None = None) -> int:
 
     # fit LJ parameters
     if args.fit:
-        get_system_lj_params(args.system, args.print)
+        get_system_lj_params(args.system, args.print, args.nonpol)
 
     return 0

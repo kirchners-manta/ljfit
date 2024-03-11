@@ -231,13 +231,13 @@ def parser(name: str = "ljfit", **kwargs) -> argparse.ArgumentParser:  # type: i
         help="Fit LJ parameters.",
         default=False,
     )
-    # p.add_argument(
-    #     "-o",
-    #     "--output",
-    #     type=str,
-    #     default="./ljfit/",
-    #     help="Output directory.",
-    # )
+    p.add_argument(
+        "-n",
+        "--nonpol",
+        action="store_true",
+        default=False,
+        help="Fit parameters for non-polarisable force field. That is, include polarization in the fit.",
+    )
     p.add_argument(
         "-p",
         "--print",
