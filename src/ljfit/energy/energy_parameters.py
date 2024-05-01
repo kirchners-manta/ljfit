@@ -33,6 +33,7 @@ def get_system_energy(
     calc_cc_c1c1im = system in ["all", "cc-c1c1im", "c1c1im", "cc"]
     calc_dc_bf4 = system in ["all", "dc-bf4", "bf4", "dc"]
     calc_dc_c1c1im = system in ["all", "dc-c1c1im", "c1c1im", "dc"]
+    calc_test = system == "test"
 
     if calc_cc_bf4:
         extract_energy(
@@ -54,3 +55,5 @@ def get_system_energy(
             monomer_b="dc",
             orientation=["c-cor", "c-h21", "c-h22"],
         )
+    if calc_test:
+        extract_energy(monomer_a="so4", monomer_b="hbn", orientation=["test"])

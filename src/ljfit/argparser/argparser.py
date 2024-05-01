@@ -261,6 +261,7 @@ def parser(name: str = "ljfit", **kwargs) -> argparse.ArgumentParser:  # type: i
             "c1c1im",
             "cc",
             "dc",
+            "test",
         ],
         help="Which system to process.",
     )
