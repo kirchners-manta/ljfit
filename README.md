@@ -1,6 +1,14 @@
 # LJFit
 ---
 
+This repo is to be understood in conjunction with the [Supplementary Information repository](https://github.com/kirchners-manta/il-graphene-ff) for our paper on an ionic liquid/graphite interface.
+Take a look there for further information. 
+
+The software in this repository can be installed in the command line using `pip install .` in the root directory of the repository.
+If used with the files provided in the repository mentioned above, the software can be used to fit Lennard-Jones parameters for ions at a graphite interface.
+Therefore, first, the energies have to be extracted from the output files of the SAPT calculations (see pseudocode 1 below, `ljfit -e`).
+Then, as a second step, the Lennard-Jones parameters have to be fitted to the pairwise energies (see pseudocode 2 below, `ljfit -f`).
+
 Pseudocode example of the workflow implemented here:
 
 ```python
